@@ -1,73 +1,118 @@
 package com.example.yobareta
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.core.app.ActivityCompat
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.example.yobareta.auth.AuthManager
-import com.example.yobareta.service.ListenService
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import com.example.yobareta.ui.theme.YobaretaTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private val authManager by lazy { AuthManager() }
-    private val recordAudioRequestCode = 101
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        micPermissionGranted.value = isGranted
+    }
+
+    private val micPermissionGranted = mutableStateOf(false)
+    private val authStatusText = mutableStateOf("Initializing Auth...")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Use Jetpack Compose for the UI layout
-        setContent {
-            // You can add your Compose UI elements here later
-        }
-
-        // 1. Test Firebase Anonymous Authentication
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch {
             try {
                 val uid = authManager.ensureAuthenticated()
-                Log.d("AuthTest", "Successfully authenticated anonymously with UID: $uid")
+                authStatusText.value = "Signed in anonymously!\nUID: $uid"
             } catch (e: Exception) {
-                Log.e("AuthTest", "Anonymous authentication failed", e)
+                authStatusText.value = "Auth failed: ${e.localizedMessage}"
             }
         }
 
-        // 2. Check microphone permission and start ListenService
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                recordAudioRequestCode
-            )
-        } else {
-            startListenService()
+        setContent {
+            YobaretaTheme {
+                val currentMicPermission = ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen(
+                        authStatus = authStatusText.value,
+                        isMicGranted = currentMicPermission,
+                        onRequestPermission = {
+                            requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    )
+                }
+            }
         }
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
+    override fun onResume() {
+        super.onResume()
+        micPermissionGranted.value = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+}
+
+@Composable
+fun MainScreen(
+    authStatus: String,
+    isMicGranted: Boolean,
+    onRequestPermission: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == recordAudioRequestCode && grantResults.isNotEmpty()
-            && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startListenService()
-        } else {
-            Log.w("PermissionTest", "Microphone permission denied by user.")
-        }
-    }
+        Text(
+            text = "Yobareta Status",
+            style = MaterialTheme.typography.headlineMedium
+        )
 
-    private fun startListenService() {
-        val serviceIntent = Intent(this, ListenService::class.java)
-        startService(serviceIntent)
-        Log.d("ServiceTest", "ListenService start command sent.")
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = authStatus,
+            style = MaterialTheme.typography.bodyLarge
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = if (isMicGranted) "Microphone Permission: Granted" else "Microphone Permission: Denied",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (!isMicGranted) {
+            Button(onClick = onRequestPermission) {
+                Text("Request Mic Permission")
+            }
+        }
     }
 }
