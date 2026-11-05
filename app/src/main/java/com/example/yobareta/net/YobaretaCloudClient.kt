@@ -81,9 +81,10 @@ class YobaretaCloudClient(
             put("audio_b64", audioB64)
             put("full_name_readings", JSONArray(profile.allFullNameReadings()))
             put("surname_readings", JSONArray(profile.allSurnameReadings()))
-            put("kanji_name", profile.kanjiName.replace(" ", "").replace("　", ""))
+            put("kanji_name", profile.kanjiName.trim())
             put("ticket_number", profile.ticketNumber.trim())
             put("venue_mode", profile.venueMode)
+            put("language_mode", profile.languageMode)
             put("previously_called", previouslyCalled)
         }
 

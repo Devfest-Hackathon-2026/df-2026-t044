@@ -1,15 +1,17 @@
-"""Deterministic Japanese reading matcher using SudachiPy (Apache-2.0).
+"""Deterministic Japanese + English reading & name matcher (SudachiPy Apache-2.0 + Latin phonetic).
 
 Responsibilities:
-1. Tokenize Japanese STT transcripts into katakana readings via SudachiPy.
-2. Normalize katakana readings for long-vowel equivalence (e.g., ショウジ == ショージ,
-   サトウ == サトー, オオノ == オーノ) and strip honorifics (様/さん/殿/ちゃん/君).
-3. Segment katakana strings into phonological morae and compute sliding-window
-   mora edit distance against the user's registered full-name and surname readings.
-4. Perform exact number matching for ticket/order numbers while distinguishing
-   destination room/counter numbers (e.g., "3番診察室") from caller numbers ("305番の方").
-5. Extract deterministic fallback destination & plain instructions, and mask transcripts
-   so other patients' names are never exposed or logged.
+1. Japanese: Tokenize STT transcripts into katakana readings via SudachiPy,
+   normalize long vowels (ショウジ == ショージ, サトウ == サトー), strip honorifics
+   (様/さん/殿/ちゃん/君), and compute sliding-window mora edit distance.
+2. English / Latin script: Normalize case & phonetic variants (e.g. ph->f, sh->s,
+   satoh->sato, shouji->shoji, stephen->steven), strip English titles (Mr./Ms./Dr.),
+   and compute sliding-window token/character edit distance.
+3. Exact number matching for ticket/order numbers in both Japanese and English
+   while distinguishing destination room/counter/party numbers ("3番診察室",
+   "Exam Room 3", "party of 2", "2名様") from caller ticket numbers ("305番", "Order 305").
+4. Extract deterministic fallback destination & plain instructions in both languages,
+   and mask bystander names in transcripts.
 """
 
 from __future__ import annotations
@@ -44,12 +46,15 @@ for _ch in "エケゲセゼテデネヘベペメレェヶ":
 for _ch in "オコゴソゾトドノホボポモヨロヲォョ":
     _KATAKANA_VOWEL[_ch] = "オ"
 
-# Honorific suffixes in kanji/kana and katakana readings
+# Honorific suffixes in Japanese kanji/kana and katakana readings
 _HONORIFIC_SURFACES = ("名様", "様", "さん", "さま", "殿", "ちゃん", "君", "くん", "氏")
 _HONORIFIC_READINGS = ("メイサマ", "サマ", "サン", "ドノ", "チャン", "クン", "シ")
 
-# Re-call indicator phrases in waiting rooms
-_RECALL_KEYWORDS = (
+# English titles & honorifics
+_ENGLISH_TITLES = {"mr", "mrs", "ms", "miss", "mx", "dr", "prof", "patient", "guest", "customer"}
+
+# Re-call indicator phrases in Japanese and English waiting rooms
+_RECALL_KEYWORDS_JA = (
     "再度",
     "もう一度",
     "お見えになりません",
@@ -59,39 +64,98 @@ _RECALL_KEYWORDS = (
     "お呼びしています",
     "繰り返します",
 )
+_RECALL_KEYWORDS_EN = (
+    "final call",
+    "second call",
+    "last call",
+    "calling again",
+    "paging again",
+    "once again",
+    "repeat call",
+    "still waiting for",
+)
 
-# Destination patterns for deterministic extraction (Stage 1 fallback when Gemini times out)
+# Destination patterns for deterministic extraction (Japanese + English)
 _DESTINATION_PATTERNS: List[Tuple[re.Pattern[str], str, str]] = [
+    # Japanese Hospital Exam Rooms
     (
         re.compile(r"(\d+|[一二三四五六七八九十]+)\s*番\s*(診察室|診|内診室|処置室|検査室|レントゲン室|CT室|MRI室)"),
         "Exam Room {num} ({raw})",
         "You were called → Exam Room {num}",
     ),
+    # Japanese Counters / Windows
     (
         re.compile(r"(\d+|[一二三四五六七八九十]+)\s*番\s*(窓口|カウンター|受付|会計|お会計)"),
         "Counter {num} ({raw})",
         "You were called → Counter {num}",
     ),
+    # English Exam / Consultation / Treatment Rooms
+    (
+        re.compile(
+            r"\b(exam(?:ination)?\s*room|consultation\s*room|treatment\s*room|testing\s*room|room|door|bay)\s*#?\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b",
+            re.IGNORECASE,
+        ),
+        "Exam Room {num}",
+        "You were called → Exam Room {num}",
+    ),
+    # English Counters / Windows / Desks
+    (
+        re.compile(
+            r"\b(counter|window|desk|register|booth|station)\s*#?\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b",
+            re.IGNORECASE,
+        ),
+        "Counter {num}",
+        "You were called → Counter {num}",
+    ),
+    # Japanese General Hospital Stations
     (
         re.compile(r"(受付|会計|お会計|薬局|お薬窓口|処方箋窓口|待合室|中待合)"),
         "{raw}",
         "You were called → Proceed to {raw}",
     ),
+    # English General Hospital / Clinic Stations
+    (
+        re.compile(r"\b(reception|front\s*desk|check-?in|pharmacy|dispensary|cashier|billing|triage|lab|x-?ray)\b", re.IGNORECASE),
+        "{raw}",
+        "You were called → Proceed to {raw}",
+    ),
+    # Japanese Restaurant Seating
     (
         re.compile(r"(お席|テーブル|カウンター席|ご案内)"),
         "Seating / Host Stand ({raw})",
         "Your table is ready → Please see the host",
     ),
+    # English Restaurant Seating
+    (
+        re.compile(r"\b(your\s+table\s+is\s+ready|table\s+is\s+ready|host\s+stand|seating\s+area|main\s+dining)\b", re.IGNORECASE),
+        "Host Stand / Seating",
+        "Your table is ready → Please see the host",
+    ),
+    # Japanese Cafe Pickup
     (
         re.compile(r"(受け取りカウンター|お渡し口|ピックアップ|カウンター)"),
         "Pickup Counter ({raw})",
         "Your order is ready → Pickup Counter",
     ),
+    # English Cafe Pickup
+    (
+        re.compile(r"\b(pickup\s*counter|pick-?up\s*area|handoff\s*counter|collection\s*point|bar\s*counter)\b", re.IGNORECASE),
+        "Pickup Counter",
+        "Your order is ready → Pickup Counter",
+    ),
 ]
 
 # Contexts where a number refers to a destination room/counter or party size, NOT a ticket number
-_NON_TICKET_NUMBER_SUFFIXES = re.compile(
+_NON_TICKET_NUMBER_SUFFIXES_JA = re.compile(
     r"^(\d+)\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|ゲート|ホーム|処置室|検査室)|名様|名|人|階|時|分|秒|歳|才)"
+)
+_NON_TICKET_NUMBER_PREFIXES_EN = re.compile(
+    r"(?:exam(?:ination)?\s*room|consultation\s*room|treatment\s*room|room|door|window|counter|desk|table|booth|gate|floor|level|party\s+of|table\s+for|group\s+of)\s*#?\s*$",
+    re.IGNORECASE,
+)
+_NON_TICKET_NUMBER_SUFFIXES_EN = re.compile(
+    r"^\s*(?:people|persons|guests|pax|am|pm|o'clock|st|nd|rd|th\s+floor)\b",
+    re.IGNORECASE,
 )
 
 _KANJI_DIGITS = {
@@ -99,8 +163,20 @@ _KANJI_DIGITS = {
     "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
     "六": 6, "七": 7, "八": 8, "九": 9,
 }
-_FULLWIDTH_DIGIT_TRANS = str.maketrans("０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
-                                       "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+_ENGLISH_NUMBER_WORDS = {
+    "zero": 0, "oh": 0,
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
+    "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+    "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
+}
+
+_FULLWIDTH_DIGIT_TRANS = str.maketrans(
+    "０１２３４５６７８９ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
+    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+)
 
 
 @dataclass
@@ -151,7 +227,6 @@ class SudachiReadingExtractor:
                     reading = hiragana_to_katakana(reading)
                 result.append((surface, reading))
             return result
-        # Fallback if SudachiPy is not installed in a minimal test environment:
         return [(text, hiragana_to_katakana(text))]
 
 
@@ -190,18 +265,7 @@ def split_into_morae(katakana: str) -> List[str]:
 
 
 def normalize_reading_morae(katakana: str, strip_honorific: bool = True) -> List[str]:
-    """Normalizes katakana into canonical morae with long-vowel equivalence.
-
-    Rules:
-    - Converts hiragana to katakana and strips spaces/punctuation.
-    - Optionally strips trailing honorifics (サマ, サン, ドノ, チャン, クン).
-    - Canonicalizes long vowels so that:
-        * ओ/उ column + 'ウ' or 'オ' -> 'ー' (e.g. ショウジ -> ショージ, サトウ -> サトー, オオノ -> オーノ)
-        * ए/इ column + 'イ' or 'エ' -> 'ー' (e.g. ケイコ -> ケーコ)
-        * अ column + 'ア' -> 'ー'
-        * ウ column + 'ウ' -> 'ー' (e.g. ユウキ -> ユーキ)
-        * イ column + 'イ' -> 'ー' (e.g. ニイガタ -> ニーガタ)
-    """
+    """Normalizes katakana into canonical morae with long-vowel equivalence."""
     kana = re.sub(r"\s+", "", hiragana_to_katakana(katakana))
     if strip_honorific:
         for hon in _HONORIFIC_READINGS:
@@ -235,7 +299,7 @@ def normalize_reading_morae(katakana: str, strip_honorific: bool = True) -> List
 
 
 def mora_edit_distance(seq_a: Sequence[str], seq_b: Sequence[str]) -> int:
-    """Standard Levenshtein distance at the mora level."""
+    """Standard Levenshtein distance over sequence elements (morae or characters)."""
     n, m = len(seq_a), len(seq_b)
     if n == 0:
         return m
@@ -258,7 +322,7 @@ def mora_edit_distance(seq_a: Sequence[str], seq_b: Sequence[str]) -> int:
 
 
 def mora_similarity(seq_a: Sequence[str], seq_b: Sequence[str]) -> float:
-    """Normalized mora similarity in [0.0, 1.0]: 1.0 - (edit_distance / max_len)."""
+    """Normalized similarity in [0.0, 1.0]: 1.0 - (edit_distance / max_len)."""
     if not seq_a or not seq_b:
         return 0.0
     max_len = max(len(seq_a), len(seq_b))
@@ -266,20 +330,102 @@ def mora_similarity(seq_a: Sequence[str], seq_b: Sequence[str]) -> float:
     return max(0.0, 1.0 - (dist / max_len))
 
 
+def normalize_latin_phonetic(word: str) -> str:
+    """Normalizes an English/Romaji token so common phonetic spellings match.
+
+    Examples:
+    - 'Shouji' / 'Shoji' / 'Shohji' -> 'shoji'
+    - 'Satoh' / 'Sato' / 'Satou' -> 'sato'
+    - 'Stephen' / 'Steven' -> 'steven'
+    - 'Smith' -> 'smith'
+    """
+    w = re.sub(r"[^a-z]", "", word.translate(_FULLWIDTH_DIGIT_TRANS).lower())
+    if not w:
+        return ""
+    # Romaji / English long vowel & digraph normalizations
+    w = w.replace("ph", "f")
+    w = re.sub(r"([o])(?:u|h|o)", r"\1", w)
+    w = re.sub(r"([u])(?:u|h)", r"\1", w)
+    w = re.sub(r"([e])(?:i|e)", r"\1", w)
+    w = re.sub(r"([a])(?:a|h)", r"\1", w)
+    w = w.replace("ck", "k")
+    # Collapse consecutive identical letters ('ll' -> 'l', 'ss' -> 's')
+    w = re.sub(r"(.)\1+", r"\1", w)
+    return w
+
+
+def best_sliding_latin_match(
+    transcript: str,
+    target_reading: str,
+) -> Tuple[float, str, bool]:
+    """Matches an English / Romaji name against an English / Latin transcript.
+
+    Returns:
+        (best_score, matched_surface, has_title_or_honorific)
+    """
+    target_norm = target_reading.translate(_FULLWIDTH_DIGIT_TRANS).strip()
+    if not re.search(r"[A-Za-z]", target_norm):
+        return 0.0, "", False
+
+    target_words_raw = [w for w in re.split(r"[^A-Za-z]+", target_norm) if w]
+    target_words = [
+        normalize_latin_phonetic(w)
+        for w in target_words_raw
+        if w.lower() not in _ENGLISH_TITLES and normalize_latin_phonetic(w)
+    ]
+    if not target_words:
+        return 0.0, "", False
+
+    # Extract word tokens with spans from the transcript
+    tx_norm = transcript.translate(_FULLWIDTH_DIGIT_TRANS)
+    tx_tokens: List[Tuple[str, str]] = []  # (surface, phonetic)
+    for m in re.finditer(r"[A-Za-z]+", tx_norm):
+        surf = m.group(0)
+        phon = normalize_latin_phonetic(surf)
+        if phon:
+            tx_tokens.append((surf, phon))
+
+    if not tx_tokens:
+        return 0.0, "", False
+
+    target_joined = "".join(target_words)
+    k = len(target_words)
+    best_score = 0.0
+    best_start = 0
+    best_end = 0
+
+    n = len(tx_tokens)
+    for start in range(n):
+        if tx_tokens[start][0].lower() in _ENGLISH_TITLES:
+            continue
+        for win_len in range(max(1, k - 1), min(n - start, k + 1) + 1):
+            end = start + win_len
+            win_phon = "".join(tx_tokens[i][1] for i in range(start, end))
+            score = mora_similarity(list(win_phon), list(target_joined))
+            if score > best_score:
+                best_score = score
+                best_start = start
+                best_end = end
+
+    if best_score == 0.0:
+        return 0.0, "", False
+
+    matched_surface = " ".join(tx_tokens[i][0] for i in range(best_start, best_end))
+    has_honorific = False
+    if best_start > 0 and tx_tokens[best_start - 1][0].lower() in _ENGLISH_TITLES:
+        has_honorific = True
+    return best_score, matched_surface, has_honorific
+
+
 def best_sliding_mora_match(
     transcript_tokens: Sequence[Tuple[str, str]],
     target_reading: str,
 ) -> Tuple[float, str, bool]:
-    """Finds the highest-scoring mora window in `transcript_tokens` for `target_reading`.
-
-    Returns:
-        (best_score, matched_surface, followed_by_honorific)
-    """
+    """Finds the highest-scoring Japanese mora window in `transcript_tokens` for `target_reading`."""
     target_morae = normalize_reading_morae(target_reading, strip_honorific=True)
     if not target_morae:
         return 0.0, "", False
 
-    # Build a flat list of morae from the transcript along with token/character provenance
     flat_morae: List[str] = []
     mora_to_token_idx: List[int] = []
 
@@ -287,14 +433,12 @@ def best_sliding_mora_match(
     if not full_reading:
         return 0.0, "", False
 
-    # Also build per-token mora spans so we can reconstruct the matched surface text
     for idx, (_, reading) in enumerate(transcript_tokens):
         token_morae = split_into_morae(reading)
         for mora in token_morae:
             flat_morae.append(mora)
             mora_to_token_idx.append(idx)
 
-    # Canonicalize long vowels across the full transcript mora stream while keeping index alignment
     canon_morae: List[str] = []
     for mora in flat_morae:
         if canon_morae:
@@ -342,7 +486,6 @@ def best_sliding_mora_match(
     end_tok = mora_to_token_idx[min(best_end - 1, len(mora_to_token_idx) - 1)]
     matched_surface = "".join(transcript_tokens[i][0] for i in range(start_tok, end_tok + 1))
 
-    # Check if the next morae or next token is an honorific (様 / さん / etc.)
     rem_morae_str = "".join(flat_morae[best_end : best_end + 4])
     followed_by_honorific = any(rem_morae_str.startswith(h) for h in _HONORIFIC_READINGS)
     if not followed_by_honorific and end_tok + 1 < len(transcript_tokens):
@@ -352,14 +495,16 @@ def best_sliding_mora_match(
     return best_score, matched_surface, followed_by_honorific
 
 
-def _kanji_number_to_int(text: str) -> Optional[int]:
-    """Converts simple Japanese kanji numerals (up to 9999) into an integer."""
+def _kanji_or_en_number_to_int(text: str) -> Optional[int]:
+    """Converts Japanese kanji numerals or simple English number words into an integer."""
     if not text:
         return None
-    if text.isdigit():
-        return int(text)
+    cleaned = text.strip().lower()
+    if cleaned.isdigit():
+        return int(cleaned)
+    if cleaned in _ENGLISH_NUMBER_WORDS:
+        return _ENGLISH_NUMBER_WORDS[cleaned]
 
-    # Positional kanji numeral parsing (千, 百, 十) vs digit-by-digit (e.g. 三〇五 -> 305)
     if all(ch in _KANJI_DIGITS for ch in text):
         return int("".join(str(_KANJI_DIGITS[ch]) for ch in text))
 
@@ -380,39 +525,44 @@ def _kanji_number_to_int(text: str) -> Optional[int]:
 
 
 def normalize_ticket_number(raw: Optional[str]) -> str:
-    """Normalizes a user-supplied ticket/order number (e.g. 'Ａ-３０５番' -> 'A305' or '305')."""
+    """Normalizes a user-supplied ticket/order number (e.g. 'Ａ-３０５番' or 'Order #305' -> 'A305' or '305')."""
     if not raw:
         return ""
     norm = raw.translate(_FULLWIDTH_DIGIT_TRANS).strip().upper()
-    norm = re.sub(r"(番号札|番号|ご注文番号|受付番号|番|様|さん|\s|-|ー)", "", norm)
+    norm = re.sub(
+        r"(番号札|番号|ご注文番号|受付番号|ORDER\s*NUMBER|TICKET\s*NUMBER|ORDER|TICKET|NUMBER|NO\.?|#|番|様|さん|\s|-|ー)",
+        "",
+        norm,
+        flags=re.IGNORECASE,
+    )
     return norm
 
 
 def match_ticket_number_in_transcript(transcript: str, ticket_number: Optional[str]) -> Tuple[bool, str]:
-    """Checks for an exact ticket/order number match in the transcript.
+    """Checks for an exact ticket/order number match in Japanese or English transcripts.
 
-    Carefully avoids matching room/counter numbers (e.g., '3番診察室', '2番窓口', '2名様')
-    when those numbers are part of a destination or party size rather than the caller's number.
+    Carefully avoids matching room/counter numbers (e.g., '3番診察室', 'Exam Room 3', 'Counter 2')
+    or party sizes ('2名様', 'party of 2', 'table for 4').
     """
     norm_target = normalize_ticket_number(ticket_number)
     if not norm_target:
         return False, ""
 
-    norm_tx = transcript.translate(_FULLWIDTH_DIGIT_TRANS).upper()
+    norm_tx = transcript.translate(_FULLWIDTH_DIGIT_TRANS)
+    norm_tx_upper = norm_tx.upper()
 
     # Check alphanumeric ticket numbers like "A12" or "B-05"
     alpha_num_match = re.match(r"^([A-Z]+)(\d+)$", norm_target)
     if alpha_num_match:
         prefix, digits = alpha_num_match.groups()
-        pattern = re.compile(rf"{re.escape(prefix)}\s*[-ーの]?\s*0*{re.escape(digits.lstrip('0') or '0')}(?!\d)")
-        m = pattern.search(norm_tx)
+        pattern = re.compile(rf"\b{re.escape(prefix)}\s*[-ーの]?\s*0*{re.escape(digits.lstrip('0') or '0')}(?!\d)")
+        m = pattern.search(norm_tx_upper)
         if m:
             return True, m.group(0)
         return False, ""
 
-    # Pure numeric ticket/order number
     if not norm_target.isdigit():
-        return (norm_target in norm_tx), (norm_target if norm_target in norm_tx else "")
+        return (norm_target in norm_tx_upper), (norm_target if norm_target in norm_tx_upper else "")
 
     target_int = int(norm_target)
 
@@ -420,15 +570,22 @@ def match_ticket_number_in_transcript(transcript: str, ticket_number: Optional[s
     for m in re.finditer(r"\d+", norm_tx):
         val = int(m.group(0))
         if val == target_int:
+            prefix = norm_tx[: m.start()]
             tail = norm_tx[m.start() :]
-            # Reject if this number is clearly a destination room/counter or party size (e.g. "3番診察室", "2名様")
-            if _NON_TICKET_NUMBER_SUFFIXES.match(tail):
+            tail_after = norm_tx[m.end() :]
+            # Reject Japanese room/counter/party size suffixes ("3番診察室", "2名様")
+            if _NON_TICKET_NUMBER_SUFFIXES_JA.match(tail):
+                continue
+            # Reject English room/counter/party size prefixes ("Exam Room 3", "Counter 2", "party of 2")
+            if _NON_TICKET_NUMBER_PREFIXES_EN.search(prefix):
+                continue
+            if _NON_TICKET_NUMBER_SUFFIXES_EN.match(tail_after):
                 continue
             return True, m.group(0)
 
     # 2. Check Kanji numerals (e.g. "三百五番", "三〇五番", "十二番")
     for m in re.finditer(r"[〇零一二三四五六七八九十百千]+", norm_tx):
-        val = _kanji_number_to_int(m.group(0))
+        val = _kanji_or_en_number_to_int(m.group(0))
         if val == target_int:
             tail_after = norm_tx[m.end() :]
             if re.match(r"^\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|処置室|検査室)|名様|名|人|階|時|分)", tail_after):
@@ -439,7 +596,7 @@ def match_ticket_number_in_transcript(transcript: str, ticket_number: Optional[s
 
 
 def extract_destination_deterministic(transcript: str) -> Tuple[str, str]:
-    """Deterministic regex fallback to extract destination and plain instruction."""
+    """Deterministic regex fallback to extract destination and plain instruction (JA + EN)."""
     if not transcript:
         return "", "You were called"
 
@@ -449,9 +606,12 @@ def extract_destination_deterministic(transcript: str) -> Tuple[str, str]:
         if m:
             raw = m.group(0).strip()
             if m.lastindex and m.lastindex >= 2:
-                num_raw = m.group(1)
-                num_val = _kanji_number_to_int(num_raw)
-                num_str = str(num_val) if num_val is not None else num_raw
+                # Group 1 or Group 2 may hold the room/counter number depending on JA vs EN pattern
+                g1 = m.group(1)
+                g2 = m.group(2)
+                num_candidate = g1 if (_kanji_or_en_number_to_int(g1) is not None) else g2
+                num_val = _kanji_or_en_number_to_int(num_candidate)
+                num_str = str(num_val) if num_val is not None else num_candidate
                 return dest_tmpl.format(num=num_str, raw=raw), instr_tmpl.format(num=num_str, raw=raw)
             return dest_tmpl.format(raw=raw), instr_tmpl.format(raw=raw)
 
@@ -459,12 +619,13 @@ def extract_destination_deterministic(transcript: str) -> Tuple[str, str]:
 
 
 def mask_transcript(transcript: str, matched_surface: str, kanji_name: Optional[str] = None) -> str:
-    """Masks any person names in the transcript to protect bystander privacy."""
+    """Masks bystander names in both Japanese and English transcripts to protect privacy."""
     if not transcript:
         return ""
     masked = transcript
-    # Replace anything before 様/さん that isn't the user's own matched surface
-    def _replace_bystander(match: re.Match[str]) -> str:
+
+    # 1. Japanese honorific masking (〇〇様 / 〇〇さん)
+    def _replace_bystander_ja(match: re.Match[str]) -> str:
         prefix = match.group(1)
         honorific = match.group(2)
         if matched_surface and matched_surface in prefix:
@@ -473,7 +634,23 @@ def mask_transcript(transcript: str, matched_surface: str, kanji_name: Optional[
             return f"{prefix}{honorific}"
         return f"[***]{honorific}"
 
-    masked = re.sub(r"([一-龯々ヶァ-ヴーぁ-ん]{1,8})(様|さん|さま)", _replace_bystander, masked)
+    masked = re.sub(r"([一-龯々ヶァ-ヴーぁ-ん]{1,8})(様|さん|さま)", _replace_bystander_ja, masked)
+
+    # 2. English title masking (Mr. / Ms. / Mrs. / Dr. Firstname Lastname)
+    def _replace_bystander_en(match: re.Match[str]) -> str:
+        title = match.group(1)
+        name_part = match.group(2)
+        if matched_surface and matched_surface.lower() in name_part.lower():
+            return match.group(0)
+        if kanji_name and kanji_name.lower() in name_part.lower():
+            return match.group(0)
+        return f"{title} [***]"
+
+    masked = re.sub(
+        r"\b(Mr\.?|Mrs\.?|Ms\.?|Miss|Dr\.?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+        _replace_bystander_en,
+        masked,
+    )
     return masked
 
 
@@ -488,7 +665,7 @@ def evaluate_transcript(
     surname_threshold: float = 0.90,
     stage2_candidate_floor: float = 0.72,
 ) -> MatchResult:
-    """Runs the Stage 1 deterministic matcher on an STT transcript."""
+    """Runs the Stage 1 deterministic matcher on an STT transcript (Japanese + English)."""
     cleaned_tx = (transcript or "").strip()
     if not cleaned_tx:
         return MatchResult(
@@ -507,7 +684,10 @@ def evaluate_transcript(
 
     extractor = get_reading_extractor()
     tokens = extractor.tokenize_with_readings(cleaned_tx)
-    is_recall_phrase = any(kw in cleaned_tx for kw in _RECALL_KEYWORDS)
+    lower_tx = cleaned_tx.lower()
+    is_recall_phrase = any(kw in cleaned_tx for kw in _RECALL_KEYWORDS_JA) or any(
+        kw in lower_tx for kw in _RECALL_KEYWORDS_EN
+    )
     destination, instruction_plain = extract_destination_deterministic(cleaned_tx)
 
     # 1. Exact ticket/order number check
@@ -531,30 +711,42 @@ def evaluate_transcript(
             candidate_for_stage2=True,
         )
 
-    # Also check if the exact kanji name appears verbatim in the transcript
     kanji_clean = re.sub(r"\s+", "", kanji_name or "")
     tx_no_space = re.sub(r"\s+", "", cleaned_tx)
 
-    # 2. Full name reading evaluation
+    # Combine explicit readings with kanji_name if kanji_name is Latin/English
+    effective_full_readings = list(full_name_readings)
+    if kanji_name and re.search(r"[A-Za-z]", kanji_name) and kanji_name not in effective_full_readings:
+        effective_full_readings.append(kanji_name)
+
+    # 2. Full name reading evaluation (Japanese Morae + English/Latin Phonetic)
     best_full_score = 0.0
     best_full_reading = ""
     best_full_surface = ""
     best_full_honorific = False
 
-    for reading in full_name_readings:
+    for reading in effective_full_readings:
         if not reading or not reading.strip():
             continue
-        score, surface, has_hon = best_sliding_mora_match(tokens, reading)
-        if kanji_clean and len(kanji_clean) >= 2 and kanji_clean in tx_no_space:
+        mora_score, mora_surf, mora_hon = best_sliding_mora_match(tokens, reading)
+        latin_score, latin_surf, latin_hon = best_sliding_latin_match(cleaned_tx, reading)
+
+        if latin_score > mora_score:
+            score, surface, has_hon = latin_score, latin_surf, latin_hon
+        else:
+            score, surface, has_hon = mora_score, mora_surf, mora_hon
+
+        if kanji_clean and len(kanji_clean) >= 2 and kanji_clean.lower() in tx_no_space.lower():
             score = max(score, 1.0)
-            surface = surface or kanji_clean
+            surface = surface or (kanji_name or "").strip()
+
         if score > best_full_score:
             best_full_score = score
             best_full_reading = reading.strip()
             best_full_surface = surface
             best_full_honorific = has_hon
 
-    # 3. Surname-only reading evaluation
+    # 3. Surname-only reading evaluation (Japanese Morae + English/Latin Phonetic)
     best_surname_score = 0.0
     best_surname_reading = ""
     best_surname_surface = ""
@@ -563,7 +755,14 @@ def evaluate_transcript(
     for reading in surname_readings:
         if not reading or not reading.strip():
             continue
-        score, surface, has_hon = best_sliding_mora_match(tokens, reading)
+        mora_score, mora_surf, mora_hon = best_sliding_mora_match(tokens, reading)
+        latin_score, latin_surf, latin_hon = best_sliding_latin_match(cleaned_tx, reading)
+
+        if latin_score > mora_score:
+            score, surface, has_hon = latin_score, latin_surf, latin_hon
+        else:
+            score, surface, has_hon = mora_score, mora_surf, mora_hon
+
         if score > best_surname_score:
             best_surname_score = score
             best_surname_reading = reading.strip()
@@ -596,7 +795,6 @@ def evaluate_transcript(
         )
 
     if best_surname_score >= surname_threshold:
-        # Surname-only NEVER fires a full 'called' alert (common surnames like 佐藤/鈴木 cause false alarms)
         possible_instr = (
             f"Possible call (surname match) → {destination}"
             if destination

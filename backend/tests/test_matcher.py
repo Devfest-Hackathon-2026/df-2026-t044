@@ -1,4 +1,4 @@
-"""Unit tests for the deterministic Japanese reading matcher and Stage 2 merge logic."""
+"""Unit tests for the deterministic Japanese + English reading matcher and Stage 2 merge logic."""
 
 from matcher import (
     evaluate_transcript,
@@ -36,6 +36,57 @@ def test_hospital_full_name_call_and_destination():
     assert res.instruction_plain == "You were called → Exam Room 3"
 
 
+def test_english_hospital_full_name_and_surname_cap():
+    # Full English name -> 'called'
+    res_full = evaluate_transcript(
+        transcript="Mr. Alex Smith, please proceed to Exam Room 3.",
+        full_name_readings=["Alex Smith", "アレックススミス"],
+        surname_readings=["Smith", "スミス"],
+        kanji_name="Alex Smith",
+    )
+    assert res_full.tier == "called"
+    assert res_full.score >= 0.85
+    assert res_full.destination == "Exam Room 3"
+    assert res_full.instruction_plain == "You were called → Exam Room 3"
+
+    # English surname-only -> capped at 'possible', never 'called'
+    res_surname = evaluate_transcript(
+        transcript="Mr. Smith, please come to Counter 2.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+        kanji_name="Alex Smith",
+    )
+    assert res_surname.tier == "possible"
+    assert res_surname.match_type == "surname"
+    assert res_surname.destination == "Counter 2"
+
+
+def test_english_recall_and_room_number_guard():
+    # English re-call phrase escalates to 'recall'
+    res_recall = evaluate_transcript(
+        transcript="Final call for Alex Smith, please proceed to Exam Room 3.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+    )
+    assert res_recall.tier == "recall"
+    assert res_recall.instruction_plain.startswith("RE-CALL:")
+
+    # English room number ("Exam Room 3") must NOT false-trigger ticket_number="3"
+    matched_room, _ = match_ticket_number_in_transcript(
+        "Mr. Johnson, please proceed to Exam Room 3.",
+        ticket_number="3",
+    )
+    assert matched_room is False
+
+    # English order number ("Order number 305") matches ticket_number="305"
+    matched_order, surf = match_ticket_number_in_transcript(
+        "Order number 305 is ready at the pickup counter.",
+        ticket_number="305",
+    )
+    assert matched_order is True
+    assert surf == "305"
+
+
 def test_surname_only_never_fires_full_alert():
     # Common surname like 佐藤 (サトウ) or 東海林 (ショウジ) alone must cap at 'possible'
     res = evaluate_transcript(
@@ -61,14 +112,12 @@ def test_recall_escalation():
 
 
 def test_ticket_number_vs_room_number():
-    # User has ticket #3, announcement calls someone else to Exam Room 3 ("3番診察室")
     matched, _ = match_ticket_number_in_transcript(
         "スズキ様、3番診察室へお入りください",
         ticket_number="3",
     )
     assert matched is False
 
-    # User has ticket #305, announcement calls ticket 305 ("305番の方")
     matched_305, surface_305 = match_ticket_number_in_transcript(
         "ご注文番号305番のお客様、受け取りカウンターまでどうぞ",
         ticket_number="305",
@@ -84,6 +133,12 @@ def test_restaurant_party_size_ignored_as_ticket():
     )
     assert matched is False
 
+    matched_en, _ = match_ticket_number_in_transcript(
+        "Party of 2 for Tanaka, your table is ready.",
+        ticket_number="2",
+    )
+    assert matched_en is False
+
 
 def test_bystander_name_masking():
     masked = mask_transcript(
@@ -95,6 +150,15 @@ def test_bystander_name_masking():
     assert "[***]様" in masked
     assert "東海林太郎様" in masked
 
+    masked_en = mask_transcript(
+        "Mr. John Doe, Room 1. Mr. Alex Smith, please proceed to Exam Room 3.",
+        matched_surface="Alex Smith",
+        kanji_name="Alex Smith",
+    )
+    assert "John Doe" not in masked_en
+    assert "Mr. [***]" in masked_en
+    assert "Alex Smith" in masked_en
+
 
 def test_stage2_merge_respects_surname_cap_and_other_person():
     stage1_surname = evaluate_transcript(
@@ -104,8 +168,6 @@ def test_stage2_merge_respects_surname_cap_and_other_person():
     )
     assert stage1_surname.tier == "possible"
 
-    # Even if Stage 2 returns high confidence addressed_to_user=True on surname-only,
-    # it MUST remain 'possible' and never escalate to 'called'.
     s2_high = Stage2Result(
         addressed_to_user=True,
         confidence=0.99,
@@ -116,7 +178,6 @@ def test_stage2_merge_respects_surname_cap_and_other_person():
     merged = merge_stage1_and_stage2(stage1_surname, s2_high)
     assert merged.tier == "possible"
 
-    # If Stage 2 detects another person with the same surname ("佐藤花子様"), downgrade to 'none'
     s2_other = Stage2Result(
         addressed_to_user=False,
         confidence=0.95,

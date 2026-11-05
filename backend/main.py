@@ -4,8 +4,9 @@ Endpoints:
 - GET /warm, POST /warm: Pre-warms SudachiPy dictionary, STT V2 client, Agent Platform Gemini client,
   and Firebase Admin SDK when the user taps Start on their phone.
 - POST /recognize: Verifies Firebase Auth ID token + App Check token, transcribes 16 kHz mono LINEAR16
-  audio via Speech-to-Text V2 (chirp_3 in 'us'), runs the deterministic SudachiPy mora reading matcher,
-  and optionally verifies candidate matches with Gemini Flash on Agent Platform (2.5 s timeout).
+  audio via Speech-to-Text V2 (chirp_3 in 'us', supporting ja-JP and en-US), runs the deterministic
+  SudachiPy + English phonetic reading matcher, and verifies candidate matches with Gemini Flash
+  on Agent Platform (2.5 s timeout).
 - GET /healthz: Liveness check.
 
 Privacy guarantee:
@@ -39,7 +40,7 @@ logger = logging.getLogger("yobareta.api")
 
 app = FastAPI(
     title="Yobareta Cloud Run API",
-    version="1.0.0",
+    version="1.1.0",
     docs_url=None,
     redoc_url=None,
 )
@@ -57,15 +58,15 @@ class RecognizeJsonRequest(BaseModel):
     )
     full_name_readings: List[str] = Field(
         default_factory=list,
-        description="Registered katakana readings for the user's full name (e.g. ['ショウジタロウ', 'トウカイリンタロウ']).",
+        description="Registered katakana or English readings for the user's full name.",
     )
     surname_readings: List[str] = Field(
         default_factory=list,
-        description="Registered katakana readings for the user's surname only (e.g. ['ショウジ', 'トウカイリン']).",
+        description="Registered katakana or English readings for the user's surname only.",
     )
     kanji_name: Optional[str] = Field(
         default=None,
-        description="User's kanji name (e.g. '東海林太郎') for STT inline phrase boosting.",
+        description="User's display/kanji/English name (e.g. '東海林太郎' or 'Alex Smith').",
     )
     ticket_number: Optional[str] = Field(
         default=None,
@@ -74,6 +75,10 @@ class RecognizeJsonRequest(BaseModel):
     venue_mode: str = Field(
         default="hospital",
         description="Venue setting: 'hospital' | 'restaurant' | 'cafe'.",
+    )
+    language_mode: str = Field(
+        default="auto",
+        description="Language setting: 'auto' (ja-JP + en-US) | 'ja-JP' | 'en-US'.",
     )
     previously_called: bool = Field(
         default=False,
@@ -96,7 +101,6 @@ class RecognizeResponse(BaseModel):
 def _check_and_update_recall_state(uid_hash: str, client_previously_called: bool) -> bool:
     """Checks if this anonymized user was recently called within _RECALL_WINDOW_SECONDS."""
     now = time.monotonic()
-    # Prune expired entries so memory stays bounded
     expired = [k for k, ts in _RECENT_CALL_TIMESTAMPS.items() if now - ts > _RECALL_WINDOW_SECONDS]
     for k in expired:
         _RECENT_CALL_TIMESTAMPS.pop(k, None)
@@ -127,7 +131,6 @@ async def warm(
     _ = stt.get_client()
     stage2 = get_stage2_verifier()
     _ = stage2.get_client()
-    # Run a dummy tokenization to ensure SudachiPy pages are faulted into RAM
     _ = extractor.tokenize_with_readings("診察室へお入りください")
     warm_ms = int((time.perf_counter() - t0) * 1000)
     logger.info(
@@ -167,7 +170,6 @@ async def _parse_recognize_payload(
         req_model = RecognizeJsonRequest(**meta_dict)
         return audio_bytes, req_model
 
-    # Default: application/json
     try:
         body = await request.json()
     except Exception as exc:
@@ -200,7 +202,7 @@ async def recognize(
     metadata: Optional[str] = Form(default=None),
     uid_hash: str = Depends(verify_request_tokens),
 ) -> RecognizeResponse:
-    """Transcribes audio segment with chirp_3, matches readings via SudachiPy, and verifies with Gemini Flash."""
+    """Transcribes audio segment with chirp_3, matches readings (JA+EN), and verifies with Gemini Flash."""
     t_start = time.perf_counter()
 
     audio_bytes, params = await _parse_recognize_payload(request, audio, metadata)
@@ -210,14 +212,13 @@ async def recognize(
             detail="Empty audio payload",
         )
 
-    # Enforce 2-10s reasonable size limit (~320 KB for 10s @ 16kHz 16-bit mono, cap at 1 MB)
     if len(audio_bytes) > 1_048_576:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Audio segment exceeds maximum allowed size (1 MB)",
         )
 
-    # 1. Speech-to-Text V2 (chirp_3 in us multi-region)
+    # 1. Speech-to-Text V2 (chirp_3 in us multi-region, supporting ja-JP and en-US)
     t_stt0 = time.perf_counter()
     stt = get_stt_recognizer()
     try:
@@ -229,6 +230,7 @@ async def recognize(
             params.kanji_name,
             params.ticket_number,
             params.venue_mode,
+            params.language_mode,
         )
     except Exception as exc:
         logger.error(
@@ -245,7 +247,7 @@ async def recognize(
         ) from exc
     stt_ms = int((time.perf_counter() - t_stt0) * 1000)
 
-    # 2. Stage 1: Deterministic SudachiPy reading & number matcher
+    # 2. Stage 1: Deterministic SudachiPy (Japanese) + Phonetic (English) matcher
     t_match0 = time.perf_counter()
     was_called_recently = _check_and_update_recall_state(uid_hash, params.previously_called)
 

@@ -4,24 +4,43 @@ data class UserWatchProfile(
     val kanjiName: String = "東海林 太郎",
     val selectedFullReading: String = "ショウジ タロウ",
     val selectedSurnameReading: String = "ショウジ",
-    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ"),
-    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン"),
+    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shoji Taro"),
+    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shoji"),
     val ticketNumber: String = "",
     val venueMode: String = "hospital", // "hospital" | "restaurant" | "cafe"
+    val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"
     val cloudRunBaseUrl: String = ""
 ) {
+    private fun normalizeReadingEntry(entry: String): String {
+        val trimmed = entry.replace("　", " ").trim()
+        // Preserve single spaces for Latin/English names ("Alex Smith"), strip spaces for Katakana
+        val hasLatin = trimmed.any { it in 'A'..'Z' || it in 'a'..'z' }
+        return if (hasLatin) {
+            trimmed.replace(Regex("\\s+"), " ")
+        } else {
+            trimmed.replace(" ", "")
+        }
+    }
+
     fun allFullNameReadings(): List<String> {
-        val primary = selectedFullReading.replace(" ", "").replace("　", "").trim()
-        return (listOf(primary) + alternateFullReadings.map { it.replace(" ", "").trim() })
-            .filter { it.isNotEmpty() }
-            .distinct()
+        val list = mutableListOf<String>()
+        list.add(normalizeReadingEntry(selectedFullReading))
+        if (kanjiName.any { it in 'A'..'Z' || it in 'a'..'z' }) {
+            list.add(normalizeReadingEntry(kanjiName))
+        }
+        for (alt in alternateFullReadings) {
+            list.add(normalizeReadingEntry(alt))
+        }
+        return list.filter { it.isNotEmpty() }.distinct()
     }
 
     fun allSurnameReadings(): List<String> {
-        val primary = selectedSurnameReading.replace(" ", "").replace("　", "").trim()
-        return (listOf(primary) + alternateSurnameReadings.map { it.replace(" ", "").trim() })
-            .filter { it.isNotEmpty() }
-            .distinct()
+        val list = mutableListOf<String>()
+        list.add(normalizeReadingEntry(selectedSurnameReading))
+        for (alt in alternateSurnameReadings) {
+            list.add(normalizeReadingEntry(alt))
+        }
+        return list.filter { it.isNotEmpty() }.distinct()
     }
 }
 

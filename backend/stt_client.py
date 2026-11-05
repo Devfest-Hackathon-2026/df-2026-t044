@@ -1,18 +1,19 @@
 """Cloud Speech-to-Text V2 client using chirp_3 in the 'us' (or 'eu') multi-region.
 
 Key architectural constraints:
-- Model: chirp_3, language: ja-JP.
+- Model: chirp_3, languages: ja-JP and/or en-US.
 - Endpoint: {STT_LOCATION}-speech.googleapis.com (default: us-speech.googleapis.com)
 - Recognizer: projects/{PROJECT_ID}/locations/{STT_LOCATION}/recognizers/_
 - ExplicitDecodingConfig: LINEAR16, 16000 Hz, 1 channel (mono).
-- Inline phrase set constructed from user's name readings, kanji name, ticket number,
-  and waiting-room venue templates.
+- Inline phrase set constructed from user's name readings, kanji/English name, ticket number,
+  and waiting-room venue templates (Japanese + English).
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import struct
 from typing import List, Optional, Sequence
 
@@ -22,7 +23,7 @@ from google.cloud.speech_v2.types import cloud_speech
 
 logger = logging.getLogger("yobareta.stt")
 
-_VENUE_PHRASE_TEMPLATES = {
+_VENUE_PHRASE_TEMPLATES_JA = {
     "hospital": [
         "診察室へお入りください",
         "番診察室",
@@ -52,11 +53,37 @@ _VENUE_PHRASE_TEMPLATES = {
     ],
 }
 
+_VENUE_PHRASE_TEMPLATES_EN = {
+    "hospital": [
+        "Exam Room",
+        "Consultation Room",
+        "Please proceed to room",
+        "Counter",
+        "Window",
+        "Reception",
+        "Pharmacy",
+        "Final call for",
+    ],
+    "restaurant": [
+        "Party of",
+        "Table for",
+        "Your table is ready",
+        "Host stand",
+        "Now seating",
+    ],
+    "cafe": [
+        "Order number",
+        "Ticket number",
+        "Pickup counter",
+        "Now serving",
+        "Ready at the counter",
+    ],
+}
+
 
 def strip_wav_header_if_present(audio_bytes: bytes) -> bytes:
     """If `audio_bytes` has a RIFF/WAVE header, returns only the raw PCM payload."""
     if len(audio_bytes) > 44 and audio_bytes[:4] == b"RIFF" and audio_bytes[8:12] == b"WAVE":
-        # Walk RIFF chunks to find 'data' chunk accurately
         offset = 12
         while offset + 8 <= len(audio_bytes):
             chunk_id = audio_bytes[offset : offset + 4]
@@ -69,12 +96,33 @@ def strip_wav_header_if_present(audio_bytes: bytes) -> bytes:
     return audio_bytes
 
 
+def resolve_language_codes(
+    language_mode: str,
+    full_name_readings: Sequence[str],
+    kanji_name: Optional[str],
+) -> List[str]:
+    """Resolves STT language_codes list from language_mode ('auto' | 'ja-JP' | 'en-US')."""
+    mode = (language_mode or "auto").strip().lower()
+    if mode in ("en", "en-us", "english"):
+        return ["en-US"]
+    if mode in ("ja", "ja-jp", "japanese"):
+        return ["ja-JP"]
+    # 'auto' / bilingual mode: put primary script language first, secondary second
+    has_latin = bool(kanji_name and re.search(r"[A-Za-z]", kanji_name)) or any(
+        re.search(r"[A-Za-z]", r) for r in full_name_readings
+    )
+    if has_latin:
+        return ["en-US", "ja-JP"]
+    return ["ja-JP", "en-US"]
+
+
 def build_inline_phrase_list(
     full_name_readings: Sequence[str],
     surname_readings: Sequence[str],
     kanji_name: Optional[str] = None,
     ticket_number: Optional[str] = None,
     venue_mode: str = "hospital",
+    language_codes: Sequence[str] = ("ja-JP", "en-US"),
 ) -> List[str]:
     """Builds an inline list of phrases to bias STT toward the user's name & venue terms."""
     phrases: List[str] = []
@@ -84,31 +132,51 @@ def build_inline_phrase_list(
         if cleaned and cleaned not in phrases:
             phrases.append(cleaned)
 
+    include_ja = any(lc.startswith("ja") for lc in language_codes)
+    include_en = any(lc.startswith("en") for lc in language_codes)
+
     if kanji_name:
         _add(kanji_name)
-        _add(f"{kanji_name}様")
-        _add(f"{kanji_name}さん")
+        if include_ja and not re.search(r"[A-Za-z]", kanji_name):
+            _add(f"{kanji_name}様")
+            _add(f"{kanji_name}さん")
 
     for r in full_name_readings:
         _add(r)
-        _add(f"{r}様")
-        _add(f"{r}さん")
+        if re.search(r"[A-Za-z]", r):
+            _add(f"Mr. {r}")
+            _add(f"Ms. {r}")
+        elif include_ja:
+            _add(f"{r}様")
+            _add(f"{r}さん")
 
     for r in surname_readings:
         _add(r)
-        _add(f"{r}様")
-        _add(f"{r}さん")
+        if re.search(r"[A-Za-z]", r):
+            _add(f"Mr. {r}")
+            _add(f"Ms. {r}")
+        elif include_ja:
+            _add(f"{r}様")
+            _add(f"{r}さん")
 
     if ticket_number:
         num = ticket_number.strip()
         if num:
-            _add(f"{num}番")
-            _add(f"{num}番の方")
-            _add(f"{num}番のお客様")
-            _add(f"番号札{num}番")
+            if include_ja:
+                _add(f"{num}番")
+                _add(f"{num}番の方")
+                _add(f"番号札{num}番")
+            if include_en:
+                _add(f"Order {num}")
+                _add(f"Number {num}")
+                _add(f"Ticket {num}")
 
-    for tmpl in _VENUE_PHRASE_TEMPLATES.get(venue_mode, _VENUE_PHRASE_TEMPLATES["hospital"]):
-        _add(tmpl)
+    if include_ja:
+        for tmpl in _VENUE_PHRASE_TEMPLATES_JA.get(venue_mode, _VENUE_PHRASE_TEMPLATES_JA["hospital"]):
+            _add(tmpl)
+    if include_en:
+        for tmpl in _VENUE_PHRASE_TEMPLATES_EN.get(venue_mode, _VENUE_PHRASE_TEMPLATES_EN["hospital"]):
+            _add(tmpl)
 
     return phrases[:64]
 
@@ -156,8 +224,9 @@ class Chirp3Recognizer:
         kanji_name: Optional[str] = None,
         ticket_number: Optional[str] = None,
         venue_mode: str = "hospital",
+        language_mode: str = "auto",
     ) -> str:
-        """Transcribes 16 kHz mono 16-bit LINEAR16 audio using chirp_3.
+        """Transcribes 16 kHz mono 16-bit LINEAR16 audio using chirp_3 (ja-JP / en-US).
 
         Never logs the transcript or audio content.
         """
@@ -171,12 +240,19 @@ class Chirp3Recognizer:
             audio_channel_count=1,
         )
 
+        lang_codes = resolve_language_codes(
+            language_mode=language_mode,
+            full_name_readings=full_name_readings,
+            kanji_name=kanji_name,
+        )
+
         phrases = build_inline_phrase_list(
             full_name_readings=full_name_readings,
             surname_readings=surname_readings,
             kanji_name=kanji_name,
             ticket_number=ticket_number,
             venue_mode=venue_mode,
+            language_codes=lang_codes,
         )
 
         adaptation: Optional[cloud_speech.SpeechAdaptation] = None
@@ -193,7 +269,7 @@ class Chirp3Recognizer:
 
         config = cloud_speech.RecognitionConfig(
             explicit_decoding_config=explicit_decoding,
-            language_codes=["ja-JP"],
+            language_codes=lang_codes,
             model=self.stt_model,
             adaptation=adaptation,
         )
@@ -208,23 +284,19 @@ class Chirp3Recognizer:
         try:
             response = client.recognize(request=request, timeout=6.0)
         except Exception as exc:
-            # If the model/region does not support inline adaptation parameters,
-            # retry immediately without adaptation so recognition never fails.
-            if adaptation is not None and ("adaptation" in str(exc).lower() or "phrase" in str(exc).lower() or "invalid" in str(exc).lower()):
-                logger.warning("Retrying STT recognize without inline adaptation due to config rejection")
-                config_no_adapt = cloud_speech.RecognitionConfig(
-                    explicit_decoding_config=explicit_decoding,
-                    language_codes=["ja-JP"],
-                    model=self.stt_model,
-                )
-                request_no_adapt = cloud_speech.RecognizeRequest(
-                    recognizer=self.recognizer_path,
-                    config=config_no_adapt,
-                    content=pcm_bytes,
-                )
-                response = client.recognize(request=request_no_adapt, timeout=6.0)
-            else:
-                raise
+            # Fallback if multi-language or inline adaptation is rejected by a specific recognizer config
+            logger.warning("Retrying STT recognize with single primary language (%s) and no adaptation", lang_codes[0])
+            config_fallback = cloud_speech.RecognitionConfig(
+                explicit_decoding_config=explicit_decoding,
+                language_codes=[lang_codes[0]],
+                model=self.stt_model,
+            )
+            request_fallback = cloud_speech.RecognizeRequest(
+                recognizer=self.recognizer_path,
+                config=config_fallback,
+                content=pcm_bytes,
+            )
+            response = client.recognize(request=request_fallback, timeout=6.0)
 
         segments: List[str] = []
         for result in response.results:
