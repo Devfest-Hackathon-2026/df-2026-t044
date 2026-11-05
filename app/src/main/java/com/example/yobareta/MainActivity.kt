@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         micPermissionGranted.value = results[Manifest.permission.RECORD_AUDIO] == true ||
-            hasPermission(Manifest.permission.RECORD_AUDIO)
+            isAudioPermissionGranted()
     }
 
     private val micPermissionGranted = mutableStateOf(false)
@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         AuthManager.initAppCheck(applicationContext)
-        micPermissionGranted.value = hasPermission(Manifest.permission.RECORD_AUDIO)
+        micPermissionGranted.value = isAudioPermissionGranted()
 
         lifecycleScope.launch {
             try {
@@ -109,11 +109,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        micPermissionGranted.value = hasPermission(Manifest.permission.RECORD_AUDIO)
+        micPermissionGranted.value = isAudioPermissionGranted()
     }
 
-    private fun hasPermission(permission: String): Boolean {
-        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    private fun isAudioPermissionGranted(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestAudioAndNotificationPermissions() {
@@ -125,7 +128,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun YobaretaAppScreen(
     authStatus: String,
@@ -158,7 +160,7 @@ fun YobaretaAppScreen(
     var ticketNumber by remember { mutableStateOf("305") }
     var venueMode by remember { mutableStateOf("hospital") }
     var languageMode by remember { mutableStateOf("auto") }
-    var cloudRunUrl by remember { mutableStateOf(BuildConfig.CLOUD_RUN_BASE_URL) }
+    var cloudRunUrl by remember { mutableStateOf(AppConfig.DEFAULT_CLOUD_RUN_BASE_URL) }
     var showAdvancedConfig by remember { mutableStateOf(false) }
 
     fun buildCurrentProfile(): UserWatchProfile {
@@ -561,7 +563,7 @@ fun YobaretaAppScreen(
                 if (showAdvancedConfig) {
                     OutlinedTextField(
                         value = cloudRunUrl,
-                        onValueChange = { cloudRunUrl = it },
+                        onValueChange = { newUrl: String -> cloudRunUrl = newUrl },
                         label = { Text("Cloud Run Base URL (asia-northeast1)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()

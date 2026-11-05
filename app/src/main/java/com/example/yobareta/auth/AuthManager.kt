@@ -1,8 +1,8 @@
 package com.example.yobareta.auth
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.util.Log
-import com.example.yobareta.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
@@ -24,7 +24,8 @@ class AuthManager {
                 if (appCheckInitialized) return
                 FirebaseApp.initializeApp(context)
                 val firebaseAppCheck = FirebaseAppCheck.getInstance()
-                if (BuildConfig.DEBUG) {
+                val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                if (isDebuggable) {
                     Log.d(TAG, "Installing DebugAppCheckProviderFactory for debug build")
                     firebaseAppCheck.installAppCheckProviderFactory(
                         DebugAppCheckProviderFactory.getInstance()

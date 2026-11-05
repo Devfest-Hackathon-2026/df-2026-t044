@@ -2,7 +2,7 @@ package com.example.yobareta.net
 
 import android.util.Base64
 import android.util.Log
-import com.example.yobareta.BuildConfig
+import com.example.yobareta.AppConfig
 import com.example.yobareta.auth.AuthManager
 import com.example.yobareta.model.RecognizeAlertResult
 import com.example.yobareta.model.UserWatchProfile
@@ -31,7 +31,7 @@ class YobaretaCloudClient(
         .build()
 
     private fun resolveBaseUrl(overrideUrl: String): String {
-        val raw = overrideUrl.trim().ifEmpty { BuildConfig.CLOUD_RUN_BASE_URL }
+        val raw = overrideUrl.trim().ifEmpty { AppConfig.DEFAULT_CLOUD_RUN_BASE_URL }
         return raw.trimEnd('/')
     }
 
