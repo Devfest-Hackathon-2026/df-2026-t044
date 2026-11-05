@@ -1,10 +1,23 @@
-# 秘密情報（コミットしない）
+# Android / Gradle build outputs & local properties
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Sensitive information
 .env
 .env.*
 !.env.example
-.dev.vars
-.dev.vars.*
-!.dev.vars.example
 *.pem
 *.key
 *.p12
@@ -13,22 +26,8 @@ credentials*.json
 google-services.json
 GoogleService-Info.plist
 
-# 依存関係とビルドの成果物
-node_modules/
-dist/
-build/
-out/
-.next/
-.wrangler/
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# OS とエディタ
-.DS_Store
+# OS and editor files
 Thumbs.db
-.idea/
 .vscode/*
 !.vscode/extensions.json
 *.log
