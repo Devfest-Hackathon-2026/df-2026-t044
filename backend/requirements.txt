@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+firebase-admin==6.6.0
+google-cloud-speech==2.30.0
+google-genai==1.5.0
+sudachipy==0.6.10
+sudachidict_core==20241021
+pytest==8.3.4
+httpx==0.28.1

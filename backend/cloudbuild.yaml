@@ -1,0 +1,45 @@
+steps:
+  # 1. Build container image (runs pytest inside Dockerfile during build)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/yobareta-repo/yobareta-api:$SHORT_SHA'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/yobareta-repo/yobareta-api:latest'
+      - './backend'
+
+  # 2. Push container image to Artifact Registry in asia-northeast1
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/yobareta-repo/yobareta-api'
+
+  # 3. Deploy to Cloud Run in asia-northeast1 (stateless, service account, no API keys)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'yobareta-api'
+      - '--image'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/yobareta-repo/yobareta-api:latest'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID,STT_LOCATION=us,STT_MODEL=chirp_3,GEMINI_LOCATION=asia-northeast1,GEMINI_MODEL=gemini-2.5-flash,REQUIRE_AUTH=true,REQUIRE_APP_CHECK=true'
+      - '--memory'
+      - '1Gi'
+      - '--cpu'
+      - '1'
+      - '--concurrency'
+      - '20'
+      - '--timeout'
+      - '15s'
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/yobareta-repo/yobareta-api:latest'
