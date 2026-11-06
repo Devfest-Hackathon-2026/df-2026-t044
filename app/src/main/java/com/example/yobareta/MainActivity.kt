@@ -159,7 +159,6 @@ fun YobaretaAppScreen(
 
     var ticketNumber by remember { mutableStateOf("305") }
     var venueMode by remember { mutableStateOf("hospital") }
-    var languageMode by remember { mutableStateOf("auto") }
     var cloudRunUrl by remember { mutableStateOf(AppConfig.DEFAULT_CLOUD_RUN_BASE_URL) }
     var showAdvancedConfig by remember { mutableStateOf(false) }
 
@@ -172,12 +171,12 @@ fun YobaretaAppScreen(
             alternateSurnameReadings = proposedOptions.map { it.surnameReading },
             ticketNumber = ticketNumber.trim(),
             venueMode = venueMode,
-            languageMode = languageMode,
+            languageMode = "auto",
             cloudRunBaseUrl = cloudRunUrl.trim()
         )
     }
 
-    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, venueMode, languageMode, cloudRunUrl) {
+    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, venueMode, cloudRunUrl) {
         ListenService.activeProfile = buildCurrentProfile()
     }
 
@@ -309,7 +308,7 @@ fun YobaretaAppScreen(
             }
         }
 
-        // 5. Venue, Language & Trigger Setup Card
+        // 5. Venue & Trigger Setup Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -319,7 +318,7 @@ fun YobaretaAppScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "1. Venue, Language & Name Setup",
+                    text = "1. Venue & Name Setup",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -338,25 +337,6 @@ fun YobaretaAppScreen(
                         FilterChip(
                             selected = (venueMode == modeKey),
                             onClick = { venueMode = modeKey },
-                            label = { Text(label) }
-                        )
-                    }
-                }
-
-                // Language Mode Chips (Auto JA+EN, Japanese, English)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val langs = listOf(
-                        "auto" to "🌐 Auto (JA+EN)",
-                        "ja-JP" to "🇯🇵 日本語",
-                        "en-US" to "🇺🇸 English"
-                    )
-                    for ((langKey, label) in langs) {
-                        FilterChip(
-                            selected = (languageMode == langKey),
-                            onClick = { languageMode = langKey },
                             label = { Text(label) }
                         )
                     }
