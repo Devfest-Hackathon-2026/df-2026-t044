@@ -44,12 +44,15 @@ class YobaretaCloudClient(
             val idToken = authManager.getIdToken()
             val appCheckToken = authManager.getAppCheckToken()
 
-            val request = Request.Builder()
+            val reqBuilder = Request.Builder()
                 .url("$baseUrl/warm")
                 .get()
                 .addHeader("Authorization", "Bearer $idToken")
                 .addHeader("X-Firebase-AppCheck", appCheckToken)
-                .build()
+            if (AppConfig.API_SECRET.isNotEmpty()) {
+                reqBuilder.addHeader("X-Yobareta-Secret", AppConfig.API_SECRET)
+            }
+            val request = reqBuilder.build()
 
             httpClient.newCall(request).execute().use { resp ->
                 if (!resp.isSuccessful) {
@@ -88,12 +91,15 @@ class YobaretaCloudClient(
             put("previously_called", previouslyCalled)
         }
 
-        val request = Request.Builder()
+        val reqBuilder = Request.Builder()
             .url("$baseUrl/recognize")
             .post(bodyJson.toString().toRequestBody(JSON_MEDIA_TYPE))
             .addHeader("Authorization", "Bearer $idToken")
             .addHeader("X-Firebase-AppCheck", appCheckToken)
-            .build()
+        if (AppConfig.API_SECRET.isNotEmpty()) {
+            reqBuilder.addHeader("X-Yobareta-Secret", AppConfig.API_SECRET)
+        }
+        val request = reqBuilder.build()
 
         httpClient.newCall(request).execute().use { resp ->
             val rawBody = resp.body?.string() ?: "{}"

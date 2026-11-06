@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        AppConfig.initFromContext(applicationContext)
         AuthManager.initAppCheck(applicationContext)
         micPermissionGranted.value = isAudioPermissionGranted()
 

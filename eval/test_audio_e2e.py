@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -45,16 +46,31 @@ PROFILES = {
 }
 
 
+def _load_dotenv(repo_root: Path) -> None:
+    for env_path in (repo_root / ".env", repo_root / "backend" / ".env"):
+        if env_path.is_file():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                s = line.strip()
+                if s and not s.startswith("#") and "=" in s:
+                    k, v = s.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
 def main():
+    eval_dir = Path(__file__).resolve().parent
+    _load_dotenv(eval_dir.parent)
     parser = argparse.ArgumentParser(description="Run E2E tests using generated audio clips.")
     parser.add_argument(
         "--url",
-        default="http://127.0.0.1:8080",
-        help="Base URL of Yobareta backend (e.g. http://127.0.0.1:8080 or Cloud Run URL)",
+        default=os.environ.get("CLOUD_RUN_BASE_URL", "http://127.0.0.1:8080"),
+        help="Base URL of Yobareta backend (defaults to CLOUD_RUN_BASE_URL in .env or http://127.0.0.1:8080)",
+    )
+    parser.add_argument(
+        "--secret",
+        default=os.environ.get("YOBARETA_API_SECRET", ""),
+        help="Optional YOBARETA_API_SECRET header value (defaults to YOBARETA_API_SECRET in .env)",
     )
     args = parser.parse_args()
-
-    eval_dir = Path(__file__).resolve().parent
     audio_dir = eval_dir / "audio"
     calls_csv = eval_dir / "calls.csv"
 
@@ -117,10 +133,14 @@ def main():
         body.extend(b"\r\n")
         body.extend(f"--{boundary}--\r\n".encode("utf-8"))
 
+        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        if args.secret:
+            headers["X-Yobareta-Secret"] = args.secret
+
         req = urllib.request.Request(
             recognize_url,
             data=bytes(body),
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            headers=headers,
             method="POST",
         )
 

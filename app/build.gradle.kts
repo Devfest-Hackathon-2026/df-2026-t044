@@ -21,7 +21,7 @@ android {
         buildConfigField(
             "String",
             "CLOUD_RUN_BASE_URL",
-            "\"https://yobareta-api-696344028704.asia-northeast1.run.app\""
+            "\"https://your-cloud-run-service.asia-northeast1.run.app\""
         )
     }
 
