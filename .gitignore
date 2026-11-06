@@ -34,3 +34,12 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Python & generated evaluation audio
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+eval/audio/
+eval/results.csv

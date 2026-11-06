@@ -1,12 +1,15 @@
-# Head-to-Head Test: Yobareta vs Google Live Transcribe
+# Evaluation Benchmark: Yobareta vs. General-Purpose Live Transcription
 
-Goal: get **measured** numbers for the pitch. Only claim a gap if this test shows it.
+This directory contains a reproducible 26-scenario benchmark comparing **Yobareta** against general-purpose name-vibration transcription tools across hospital, restaurant, and café waiting-room announcements in Japanese and English.
 
 | File | Purpose |
 | :--- | :--- |
-| `calls.csv` | 26 test announcements: what to say, what should happen, which gap each one tests |
-| `results_template.csv` | Copy to `results.csv` and fill in during the test |
-| `score.py` | Prints the comparison table (`python eval/score.py eval/results.csv`) |
+| `calls.csv` | 26 structured test announcements (`true_call`, `surname_only_call`, `distractor`, `non_call`) |
+| `results_template.csv` | Recording template for side-by-side physical device evaluation |
+| `score.py` | Computes Recall, False-Alarm Rate, Destination Accuracy, and Latency (`python eval/score.py --verify-matcher`) |
+| `generate_audio.py` | Synthesizes 16 kHz mono PCM `.wav` audio clips for all 26 announcements |
+| `test_audio_e2e.py` | End-to-end audio upload & recognition test harness against `/recognize` |
+| `Yobareta_Eval_Colab.ipynb` | Interactive Google Colab notebook to run all tests and play audio clips inline |
 
 ---
 
@@ -44,20 +47,18 @@ Set up **both apps with the same information** for each profile, so the comparis
    - `lt_buzzed`: `y` / `n`
 6. Do at least **2 runs** (`run` = 1, 2). Duplicate the rows for run 2.
 
-## 4. Score
+## 4. Automated Verification & Scoring
+
+Run the deterministic matcher benchmark across all 26 utterances:
 
 ```bash
-python eval/score.py eval/results.csv
+python3 eval/score.py --verify-matcher
 ```
 
-The table shows: true calls detected, surname-only calls noticed, **false full alarms** on other people, any alert on non-calls, correct destinations, and median latency.
+Or score a recorded side-by-side physical device run:
 
-## 5. What to claim in the pitch
+```bash
+python3 eval/score.py eval/results.csv
+```
 
-- ✅ Claim a gap only if the numbers show it (e.g. *"0/6 false full alarms vs 3/6 for Live Transcribe on same-surname calls"*).
-- ✅ Report latency honestly, even if Live Transcribe is faster. It streams continuously; Yobareta waits for the announcement to finish.
-- ❌ Don't claim a gap the test didn't measure.
-
-## Open question to settle with this test
-
-**Restaurant calls (R01):** restaurants usually call **surname + party size only** (「2名様でお待ちのショウジ様」). Yobareta deliberately caps surname-only matches at **Possible** (2 short buzzes) to avoid false alarms in hospitals. If testers say that alert is too weak for restaurants, consider a party-size input: *surname + matching party size → Called*.
+The summary reports true-call detection rate, surname-only call handling, false-alarm rate on same-surname distractors and room numbers, non-call suppression, destination extraction accuracy, and median end-to-end latency.
