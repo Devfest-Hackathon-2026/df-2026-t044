@@ -11,11 +11,13 @@ import csv
 import io
 import os
 from pathlib import Path
+import shutil
+import wave
 from gtts import gTTS
 
 try:
     from pydub import AudioSegment
-    HAS_PYDUB = True
+    HAS_PYDUB = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
 except ImportError:
     HAS_PYDUB = False
 
