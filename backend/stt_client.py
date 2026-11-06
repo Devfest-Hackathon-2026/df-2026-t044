@@ -260,30 +260,35 @@ class Chirp3Recognizer:
             kanji_name=kanji_name,
         )
 
-        phrases = build_inline_phrase_list(
-            full_name_readings=full_name_readings,
-            surname_readings=surname_readings,
-            kanji_name=kanji_name,
-            ticket_number=ticket_number,
-            venue_mode=venue_mode,
-            language_codes=lang_codes,
-        )
-
+        # Note: chirp_3 does not support inline SpeechAdaptation (it rejects with 400 InvalidArgument
+        # and forces a slow second round-trip). Only attach adaptation for non-chirp models.
         adaptation: Optional[cloud_speech.SpeechAdaptation] = None
-        if phrases:
-            adaptation = cloud_speech.SpeechAdaptation(
-                phrase_sets=[
-                    cloud_speech.SpeechAdaptation.AdaptationPhraseSet(
-                        inline_phrase_set=cloud_speech.PhraseSet(
-                            phrases=[cloud_speech.PhraseSet.Phrase(value=p) for p in phrases]
-                        )
-                    )
-                ]
+        if not self.stt_model.startswith("chirp"):
+            phrases = build_inline_phrase_list(
+                full_name_readings=full_name_readings,
+                surname_readings=surname_readings,
+                kanji_name=kanji_name,
+                ticket_number=ticket_number,
+                venue_mode=venue_mode,
+                language_codes=lang_codes,
             )
+            if phrases:
+                adaptation = cloud_speech.SpeechAdaptation(
+                    phrase_sets=[
+                        cloud_speech.SpeechAdaptation.AdaptationPhraseSet(
+                            inline_phrase_set=cloud_speech.PhraseSet(
+                                phrases=[cloud_speech.PhraseSet.Phrase(value=p) for p in phrases]
+                            )
+                        )
+                    ]
+                )
+
+        # chirp_3 performs fastest and avoids 400 fallback retries with a single primary language code
+        primary_lang_codes = [lang_codes[0]] if self.stt_model.startswith("chirp") else lang_codes
 
         config = cloud_speech.RecognitionConfig(
             explicit_decoding_config=explicit_decoding,
-            language_codes=lang_codes,
+            language_codes=primary_lang_codes,
             model=self.stt_model,
             adaptation=adaptation,
         )

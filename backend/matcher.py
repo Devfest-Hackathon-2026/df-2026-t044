@@ -743,7 +743,7 @@ def evaluate_transcript(
             destination=destination,
             instruction_plain=instruction_plain,
             transcript_masked=mask_transcript(cleaned_tx, ticket_surface, kanji_name),
-            candidate_for_stage2=True,
+            candidate_for_stage2=not bool(destination),
         )
 
     kanji_clean = re.sub(r"\s+", "", kanji_name or "")
@@ -822,7 +822,7 @@ def evaluate_transcript(
             destination=destination,
             instruction_plain=instruction_plain,
             transcript_masked=mask_transcript(cleaned_tx, best_full_surface, kanji_name),
-            candidate_for_stage2=True,
+            candidate_for_stage2=not bool(destination),
             debug_details={
                 "full_score": round(best_full_score, 4),
                 "surname_score": round(best_surname_score, 4),
@@ -861,7 +861,7 @@ def evaluate_transcript(
     return MatchResult(
         tier="none",
         score=round(top_score, 4),
-        match_type="none",
+        match_type=top_type if top_score >= stage2_candidate_floor else "none",
         matched_trigger=top_trigger if top_score >= stage2_candidate_floor else "",
         matched_surface=top_surface if top_score >= stage2_candidate_floor else "",
         has_honorific=best_full_honorific or best_surname_honorific,

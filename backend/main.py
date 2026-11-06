@@ -287,7 +287,12 @@ async def recognize(
 
     # 2. Stage 1: Deterministic SudachiPy (Japanese) + Phonetic (English) matcher
     t_match0 = time.perf_counter()
-    was_called_recently = _check_and_update_recall_state(uid_hash, params.previously_called)
+    # Use client's explicit previously_called state (and server recall state only when authenticated with a unique UID)
+    recall_key = f"{uid_hash}:{(params.kanji_name or '').strip()}:{(params.ticket_number or '').strip()}"
+    was_called_recently = params.previously_called or (
+        os.environ.get("REQUIRE_AUTH", "true").lower() in ("1", "true", "yes")
+        and _check_and_update_recall_state(recall_key, False)
+    )
 
     full_thresh = float(os.environ.get("FULL_NAME_THRESHOLD", str(params.full_name_threshold)))
     surname_thresh = float(os.environ.get("SURNAME_THRESHOLD", str(params.surname_threshold)))
@@ -332,7 +337,7 @@ async def recognize(
         )
 
     if final_result.tier in ("called", "recall"):
-        _record_call_event(uid_hash)
+        _record_call_event(recall_key)
 
     total_latency_ms = int((time.perf_counter() - t_start) * 1000)
 

@@ -164,6 +164,8 @@ def main():
                 print(
                     f"{call_id:<5} {row['category'][:13]:<15} {wav_path.name:<10} {res_tier:<10} {row['acceptable_tiers']:<15} {elapsed_ms}ms    {status_str}"
                 )
+                if not ok:
+                    print(f"      ↳ transcript='{data.get('transcript_masked', '')}' dest='{dest}' (expected dest='{exp_dest}')")
 
         except urllib.error.HTTPError as e:
             err_msg = e.read().decode("utf-8", errors="ignore")
