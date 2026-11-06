@@ -1,5 +1,10 @@
 """Unit tests for the deterministic Japanese + English reading matcher and Stage 2 merge logic."""
 
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from matcher import (
     evaluate_transcript,
     extract_destination_deterministic,
