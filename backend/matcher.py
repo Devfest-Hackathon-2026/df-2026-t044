@@ -156,7 +156,7 @@ _GENERIC_DEST_EN = re.compile(
 
 # Contexts where a number refers to a destination room/counter or party size, NOT a ticket number
 _NON_TICKET_NUMBER_SUFFIXES_JA = re.compile(
-    r"^(\d+)\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|ゲート|ホーム|処置室|検査室)|名様|名|人|階|時|分|秒|歳|才)"
+    r"^(\d+)\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|ゲート|ホーム|処置室|検査室)|番線|号室|号棟|号館|号車|名様|名|人|階|時|分|秒|歳|才)"
 )
 _NON_TICKET_NUMBER_PREFIXES_EN = re.compile(
     r"(?:exam(?:ination)?\s*room|consultation\s*room|treatment\s*room|room|door|window|counter|desk|table|booth|gate|floor|level|party\s+of|table\s+for|group\s+of)\s*#?\s*$",
@@ -597,7 +597,7 @@ def match_ticket_number_in_transcript(transcript: str, ticket_number: Optional[s
         val = _kanji_or_en_number_to_int(m.group(0))
         if val == target_int:
             tail_after = norm_tx[m.end() :]
-            if re.match(r"^\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|処置室|検査室)|名様|名|人|階|時|分)", tail_after):
+            if re.match(r"^\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|処置室|検査室)|番線|号室|号棟|号館|号車|名様|名|人|階|時|分)", tail_after):
                 continue
             return True, m.group(0)
 

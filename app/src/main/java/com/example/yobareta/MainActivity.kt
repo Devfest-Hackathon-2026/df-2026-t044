@@ -167,12 +167,24 @@ fun YobaretaAppScreen(
     var showJudgeDrawer by remember { mutableStateOf(false) }
 
     fun buildCurrentProfile(): UserWatchProfile {
+        // Phonetic respellings ("AH-leks SMITH") are display-only; send only real-word hints.
+        val (fullHints, surnameHints) = KanjiReadingProposer.buildMatchHints(kanjiName, proposedOptions)
+        val primaryFull = if (KanjiReadingProposer.isPhoneticRespelling(selectedFullReading)) {
+            fullHints.firstOrNull().orEmpty()
+        } else {
+            selectedFullReading.trim()
+        }
+        val primarySurname = if (KanjiReadingProposer.isPhoneticRespelling(selectedSurnameReading)) {
+            surnameHints.firstOrNull().orEmpty()
+        } else {
+            selectedSurnameReading.trim()
+        }
         return UserWatchProfile(
             kanjiName = kanjiName.trim(),
-            selectedFullReading = selectedFullReading.trim(),
-            selectedSurnameReading = selectedSurnameReading.trim(),
-            alternateFullReadings = proposedOptions.map { it.fullReading },
-            alternateSurnameReadings = proposedOptions.map { it.surnameReading },
+            selectedFullReading = primaryFull,
+            selectedSurnameReading = primarySurname,
+            alternateFullReadings = fullHints,
+            alternateSurnameReadings = surnameHints,
             ticketNumber = ticketNumber.trim(),
             venueMode = "auto",
             languageMode = "auto",

@@ -4,8 +4,8 @@ data class UserWatchProfile(
     val kanjiName: String = "東海林 太郎",
     val selectedFullReading: String = "ショウジ タロウ",
     val selectedSurnameReading: String = "ショウジ",
-    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "SHOH-jee TAH-roh"),
-    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "SHOH-jee"),
+    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shouji Tarou", "Tarou Shouji"),
+    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shouji"),
     val ticketNumber: String = "",
     val venueMode: String = "auto",     // "auto" (all venues) | "hospital" | "restaurant" | "cafe"
     val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"
@@ -15,7 +15,8 @@ data class UserWatchProfile(
         val trimmed = entry.replace("　", " ").trim()
         val hasLatin = trimmed.any { it in 'A'..'Z' || it in 'a'..'z' }
         return if (hasLatin) {
-            trimmed.replace("-", "").replace(Regex("\\s+"), " ").trim()
+            // Keep Latin names as typed (hyphenated names like "Smith-Jones" stay intact)
+            trimmed.replace(Regex("\\s+"), " ")
         } else {
             trimmed.replace(" ", "")
         }

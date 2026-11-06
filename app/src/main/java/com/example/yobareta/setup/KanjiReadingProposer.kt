@@ -186,6 +186,140 @@ object KanjiReadingProposer {
         return buildLocalFallback(cleaned)
     }
 
+    private val HYPHENATED_SYLLABLES = Regex("[A-Za-z]-[A-Za-z]")
+
+    /**
+     * True for display-only pronunciation guides such as "AH-leks SMITH" or "SHOH-jee".
+     * These are not real words, so they must never be sent to the backend as STT
+     * phrase hints or matcher targets.
+     */
+    fun isPhoneticRespelling(text: String, note: String = ""): Boolean {
+        if (note.contains("phonetic", ignoreCase = true)) return true
+        val trimmed = text.trim()
+        if (trimmed.none { it in 'A'..'Z' || it in 'a'..'z' }) return false
+        if (HYPHENATED_SYLLABLES.containsMatchIn(trimmed)) return true
+        val letters = trimmed.filter { it.isLetter() }
+        return letters.length > 1 && letters.all { it.isUpperCase() }
+    }
+
+    /**
+     * Builds the real-word readings sent to the backend (STT phrase hints + matcher targets):
+     * - Latin names: the name exactly as typed, its surname, and Japanese PA katakana.
+     * - Japanese names: every katakana reading plus Hepburn romaji in both name orders,
+     *   so an English announcement ("Shoji Taro" / "Taro Shoji") still matches.
+     * Phonetic respellings are excluded (display-only).
+     */
+    fun buildMatchHints(
+        nameInput: String,
+        options: List<ReadingOption>
+    ): Pair<List<String>, List<String>> {
+        val name = nameInput.replace("　", " ").trim()
+        val nameIsLatin = name.any { it in 'A'..'Z' || it in 'a'..'z' }
+        val fullHints = mutableListOf<String>()
+        val surnameHints = mutableListOf<String>()
+
+        if (nameIsLatin) {
+            fullHints.add(name)
+            name.split(Regex("\\s+")).lastOrNull()?.let { surnameHints.add(it) }
+        }
+
+        for (option in options) {
+            if (isPhoneticRespelling(option.fullReading, option.note)) continue
+            fullHints.add(option.fullReading)
+            surnameHints.add(option.surnameReading)
+
+            if (!nameIsLatin) {
+                katakanaToRomaji(option.fullReading)?.let { romaji ->
+                    fullHints.add(romaji)
+                    val words = romaji.split(" ")
+                    if (words.size == 2) fullHints.add("${words[1]} ${words[0]}")
+                }
+                katakanaToRomaji(option.surnameReading)?.let { surnameHints.add(it) }
+            }
+        }
+
+        return fullHints.filter { it.isNotBlank() }.distinct() to
+            surnameHints.filter { it.isNotBlank() }.distinct()
+    }
+
+    private val KATAKANA_DIGRAPHS: Map<String, String> = mapOf(
+        "キャ" to "kya", "キュ" to "kyu", "キョ" to "kyo",
+        "シャ" to "sha", "シュ" to "shu", "ショ" to "sho", "シェ" to "she",
+        "チャ" to "cha", "チュ" to "chu", "チョ" to "cho", "チェ" to "che",
+        "ニャ" to "nya", "ニュ" to "nyu", "ニョ" to "nyo",
+        "ヒャ" to "hya", "ヒュ" to "hyu", "ヒョ" to "hyo",
+        "ミャ" to "mya", "ミュ" to "myu", "ミョ" to "myo",
+        "リャ" to "rya", "リュ" to "ryu", "リョ" to "ryo",
+        "ギャ" to "gya", "ギュ" to "gyu", "ギョ" to "gyo",
+        "ジャ" to "ja", "ジュ" to "ju", "ジョ" to "jo", "ジェ" to "je",
+        "ビャ" to "bya", "ビュ" to "byu", "ビョ" to "byo",
+        "ピャ" to "pya", "ピュ" to "pyu", "ピョ" to "pyo",
+        "ファ" to "fa", "フィ" to "fi", "フェ" to "fe", "フォ" to "fo",
+        "ティ" to "ti", "ディ" to "di", "ウィ" to "wi", "ウェ" to "we", "ウォ" to "wo"
+    )
+
+    private val KATAKANA_SINGLES: Map<Char, String> = mapOf(
+        'ア' to "a", 'イ' to "i", 'ウ' to "u", 'エ' to "e", 'オ' to "o",
+        'カ' to "ka", 'キ' to "ki", 'ク' to "ku", 'ケ' to "ke", 'コ' to "ko",
+        'ガ' to "ga", 'ギ' to "gi", 'グ' to "gu", 'ゲ' to "ge", 'ゴ' to "go",
+        'サ' to "sa", 'シ' to "shi", 'ス' to "su", 'セ' to "se", 'ソ' to "so",
+        'ザ' to "za", 'ジ' to "ji", 'ズ' to "zu", 'ゼ' to "ze", 'ゾ' to "zo",
+        'タ' to "ta", 'チ' to "chi", 'ツ' to "tsu", 'テ' to "te", 'ト' to "to",
+        'ダ' to "da", 'ヂ' to "ji", 'ヅ' to "zu", 'デ' to "de", 'ド' to "do",
+        'ナ' to "na", 'ニ' to "ni", 'ヌ' to "nu", 'ネ' to "ne", 'ノ' to "no",
+        'ハ' to "ha", 'ヒ' to "hi", 'フ' to "fu", 'ヘ' to "he", 'ホ' to "ho",
+        'バ' to "ba", 'ビ' to "bi", 'ブ' to "bu", 'ベ' to "be", 'ボ' to "bo",
+        'パ' to "pa", 'ピ' to "pi", 'プ' to "pu", 'ペ' to "pe", 'ポ' to "po",
+        'マ' to "ma", 'ミ' to "mi", 'ム' to "mu", 'メ' to "me", 'モ' to "mo",
+        'ヤ' to "ya", 'ユ' to "yu", 'ヨ' to "yo",
+        'ラ' to "ra", 'リ' to "ri", 'ル' to "ru", 'レ' to "re", 'ロ' to "ro",
+        'ワ' to "wa", 'ヲ' to "o", 'ン' to "n", 'ヴ' to "vu",
+        'ァ' to "a", 'ィ' to "i", 'ゥ' to "u", 'ェ' to "e", 'ォ' to "o"
+    )
+
+    /**
+     * Converts a katakana reading to capitalised Hepburn romaji
+     * (e.g. "ショウジ タロウ" -> "Shouji Tarou"). Returns null if the text is not pure kana.
+     * Long vowels are kept as written; the backend matcher already treats
+     * "Shouji" == "Shoji" and "Tarou" == "Taro".
+     */
+    fun katakanaToRomaji(text: String): String? {
+        val kana = hiraganaToKatakana(text.replace("　", " ").trim())
+        if (kana.isEmpty()) return null
+        if (kana.any { !(it in '\u30A0'..'\u30FF' || it == ' ') }) return null
+
+        val words = kana.split(Regex("[\\s・]+")).filter { it.isNotEmpty() }
+        val romajiWords = words.map { word ->
+            val sb = StringBuilder()
+            var i = 0
+            var doubleNext = false
+            while (i < word.length) {
+                val ch = word[i]
+                if (ch == 'ッ') {
+                    doubleNext = true
+                    i++
+                    continue
+                }
+                if (ch == 'ー') {
+                    i++
+                    continue
+                }
+                val pair = if (i + 1 < word.length) word.substring(i, i + 2) else ""
+                val romaji = KATAKANA_DIGRAPHS[pair]?.also { i += 2 }
+                    ?: KATAKANA_SINGLES[ch]?.also { i += 1 }
+                    ?: run { i += 1; "" }
+                if (doubleNext && romaji.isNotEmpty()) {
+                    sb.append(if (romaji.startsWith("ch")) "t" else romaji.first().toString())
+                    doubleNext = false
+                }
+                sb.append(romaji)
+            }
+            sb.toString().replaceFirstChar { it.uppercase() }
+        }.filter { it.isNotEmpty() }
+
+        return if (romajiWords.isEmpty()) null else romajiWords.joinToString(" ")
+    }
+
     /**
      * Enriches reading options asynchronously using Gemini via Firebase AI Logic.
      */

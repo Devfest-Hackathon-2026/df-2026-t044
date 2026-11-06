@@ -126,6 +126,15 @@ def test_ticket_number_vs_room_number():
     assert surface_305 == "305"
 
 
+def test_room_number_with_goushitsu_ignored_as_ticket():
+    # Ticket #305 must not fire on a ward room number ("305号室")
+    matched, _ = match_ticket_number_in_transcript(
+        "305号室のスズキ様、処置室へお越しください",
+        ticket_number="305",
+    )
+    assert matched is False
+
+
 def test_restaurant_party_size_ignored_as_ticket():
     matched, _ = match_ticket_number_in_transcript(
         "2名様でお待ちのタナカ様、お席へご案内いたします",
