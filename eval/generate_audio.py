@@ -11,7 +11,7 @@ import csv
 import io
 import os
 from pathlib import Path
-from gTTS import gTTS
+from gtts import gTTS
 
 try:
     from pydub import AudioSegment
