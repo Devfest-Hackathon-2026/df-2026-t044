@@ -1,7 +1,7 @@
 # Yobareta (呼ばれた)
 
 ## Never miss your turn. 
-###An assistive waiting-room call detector for Deaf, hard-of-hearing, and international individuals.
+### An assistive waiting-room call detector for Deaf, hard-of-hearing, and international individuals.
 
 📌 Overview
 
