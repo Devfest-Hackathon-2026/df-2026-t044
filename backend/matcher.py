@@ -145,6 +145,15 @@ _DESTINATION_PATTERNS: List[Tuple[re.Pattern[str], str, str]] = [
     ),
 ]
 
+# General catch-all destination extractors when a destination is outside the predefined list
+_GENERIC_DEST_JA = re.compile(
+    r"((?:\d+|[一二三四五六七八九十]+)階\s*の?\s*[一-龯々ァ-ヴーA-Za-z0-9]{1,14}|[一-龯々ァ-ヴーA-Za-z0-9]{2,14}(?:室|窓口|受付|コーナー|カウンター|席|ゲート|番線|エリア|ロビー|フロア|棟|番テーブル))\s*(?:へ|まで|に|でお待ち)"
+)
+_GENERIC_DEST_EN = re.compile(
+    r"\b(?:proceed\s+to|come\s+to|go\s+to|report\s+to|head\s+to|waiting\s+at|ready\s+at)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9\s#-]{1,28}?)(?=\.|,|!|\s+please\b|$)",
+    re.IGNORECASE,
+)
+
 # Contexts where a number refers to a destination room/counter or party size, NOT a ticket number
 _NON_TICKET_NUMBER_SUFFIXES_JA = re.compile(
     r"^(\d+)\s*(?:番\s*(?:診察室|診|窓口|カウンター|受付|会計|テーブル|席|ゲート|ホーム|処置室|検査室)|名様|名|人|階|時|分|秒|歳|才)"
@@ -614,6 +623,17 @@ def extract_destination_deterministic(transcript: str) -> Tuple[str, str]:
                 num_str = str(num_val) if num_val is not None else num_candidate
                 return dest_tmpl.format(num=num_str, raw=raw), instr_tmpl.format(num=num_str, raw=raw)
             return dest_tmpl.format(raw=raw), instr_tmpl.format(raw=raw)
+
+    # Fallback: Open-ended catch-all for any destination noun phrase before 'へ/まで/に' or after 'proceed/come/go to'
+    m_ja = _GENERIC_DEST_JA.search(norm_tx)
+    if m_ja:
+        dest_raw = m_ja.group(1).strip()
+        return dest_raw, f"You were called → {dest_raw}"
+
+    m_en = _GENERIC_DEST_EN.search(norm_tx)
+    if m_en:
+        dest_raw = m_en.group(1).strip()
+        return dest_raw, f"You were called → {dest_raw}"
 
     return "", "You were called"
 

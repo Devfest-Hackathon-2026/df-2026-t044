@@ -158,7 +158,6 @@ fun YobaretaAppScreen(
     var isProposingReadings by remember { mutableStateOf(false) }
 
     var ticketNumber by remember { mutableStateOf("305") }
-    var venueMode by remember { mutableStateOf("hospital") }
     var cloudRunUrl by remember { mutableStateOf(AppConfig.DEFAULT_CLOUD_RUN_BASE_URL) }
     var showAdvancedConfig by remember { mutableStateOf(false) }
 
@@ -170,13 +169,13 @@ fun YobaretaAppScreen(
             alternateFullReadings = proposedOptions.map { it.fullReading },
             alternateSurnameReadings = proposedOptions.map { it.surnameReading },
             ticketNumber = ticketNumber.trim(),
-            venueMode = venueMode,
+            venueMode = "auto",
             languageMode = "auto",
             cloudRunBaseUrl = cloudRunUrl.trim()
         )
     }
 
-    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, venueMode, cloudRunUrl) {
+    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, cloudRunUrl) {
         ListenService.activeProfile = buildCurrentProfile()
     }
 
@@ -308,7 +307,7 @@ fun YobaretaAppScreen(
             }
         }
 
-        // 5. Venue & Trigger Setup Card
+        // 5. Name & Ticket Trigger Setup Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -318,29 +317,10 @@ fun YobaretaAppScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "1. Venue & Name Setup",
+                    text = "1. Name & Ticket Setup",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-
-                // Venue Mode Chips
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val modes = listOf(
-                        "hospital" to "🏥 Hospital",
-                        "restaurant" to "🍽️ Restaurant",
-                        "cafe" to "☕ Café #Order"
-                    )
-                    for ((modeKey, label) in modes) {
-                        FilterChip(
-                            selected = (venueMode == modeKey),
-                            onClick = { venueMode = modeKey },
-                            label = { Text(label) }
-                        )
-                    }
-                }
 
                 // Kanji or English Name + Gemini Reading Proposer
                 Row(

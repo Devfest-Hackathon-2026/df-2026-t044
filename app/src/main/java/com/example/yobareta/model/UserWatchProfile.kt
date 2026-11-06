@@ -7,7 +7,7 @@ data class UserWatchProfile(
     val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shoji Taro"),
     val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shoji"),
     val ticketNumber: String = "",
-    val venueMode: String = "hospital", // "hospital" | "restaurant" | "cafe"
+    val venueMode: String = "auto",     // "auto" (all venues) | "hospital" | "restaurant" | "cafe"
     val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"
     val cloudRunBaseUrl: String = ""
 ) {

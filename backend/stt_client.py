@@ -172,10 +172,20 @@ def build_inline_phrase_list(
                 _add(f"Ticket {num}")
 
     if include_ja:
-        for tmpl in _VENUE_PHRASE_TEMPLATES_JA.get(venue_mode, _VENUE_PHRASE_TEMPLATES_JA["hospital"]):
+        ja_templates = (
+            [p for v in _VENUE_PHRASE_TEMPLATES_JA.values() for p in v]
+            if venue_mode not in _VENUE_PHRASE_TEMPLATES_JA
+            else _VENUE_PHRASE_TEMPLATES_JA[venue_mode]
+        )
+        for tmpl in ja_templates:
             _add(tmpl)
     if include_en:
-        for tmpl in _VENUE_PHRASE_TEMPLATES_EN.get(venue_mode, _VENUE_PHRASE_TEMPLATES_EN["hospital"]):
+        en_templates = (
+            [p for v in _VENUE_PHRASE_TEMPLATES_EN.values() for p in v]
+            if venue_mode not in _VENUE_PHRASE_TEMPLATES_EN
+            else _VENUE_PHRASE_TEMPLATES_EN[venue_mode]
+        )
+        for tmpl in en_templates:
             _add(tmpl)
 
     return phrases[:64]

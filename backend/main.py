@@ -73,8 +73,8 @@ class RecognizeJsonRequest(BaseModel):
         description="Optional waiting/order ticket number (e.g. '305' or 'A-12').",
     )
     venue_mode: str = Field(
-        default="hospital",
-        description="Venue setting: 'hospital' | 'restaurant' | 'cafe'.",
+        default="auto",
+        description="Venue setting: 'auto' (all venues) | 'hospital' | 'restaurant' | 'cafe'.",
     )
     language_mode: str = Field(
         default="auto",

@@ -187,3 +187,26 @@ def test_stage2_merge_respects_surname_cap_and_other_person():
     )
     merged_other = merge_stage1_and_stage2(stage1_surname, s2_other)
     assert merged_other.tier == "none"
+
+
+def test_open_ended_custom_destinations_ja_and_en():
+    # Unlisted Japanese destination ("2階の採血コーナー")
+    res_ja = evaluate_transcript(
+        transcript="ショージタロウ様、2階の採血コーナーへお越しください",
+        full_name_readings=["ショウジタロウ"],
+        surname_readings=["ショウジ"],
+    )
+    assert res_ja.tier == "called"
+    assert res_ja.destination == "2階の採血コーナー"
+    assert res_ja.instruction_plain == "You were called → 2階の採血コーナー"
+
+    # Unlisted English destination ("4th Floor MRI Suite")
+    res_en = evaluate_transcript(
+        transcript="Mr. Alex Smith, please proceed to the 4th Floor MRI Suite.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+    )
+    assert res_en.tier == "called"
+    assert res_en.destination == "4th Floor MRI Suite"
+    assert res_en.instruction_plain == "You were called → 4th Floor MRI Suite"
+
