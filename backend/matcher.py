@@ -107,9 +107,24 @@ _DESTINATION_PATTERNS: List[Tuple[re.Pattern[str], str, str]] = [
         "Counter {num}",
         "You were called → Counter {num}",
     ),
-    # Japanese General Hospital Stations
+    # Japanese General Hospital Stations (with bilingual English + Japanese labels)
     (
-        re.compile(r"(受付|会計|お会計|薬局|お薬窓口|処方箋窓口|待合室|中待合)"),
+        re.compile(r"(総合受付|受付窓口|受付)"),
+        "Reception ({raw})",
+        "You were called → Reception ({raw})",
+    ),
+    (
+        re.compile(r"(お会計窓口|会計窓口|お会計|会計|精算機)"),
+        "Cashier ({raw})",
+        "You were called → Cashier ({raw})",
+    ),
+    (
+        re.compile(r"(薬局|お薬窓口|処方箋窓口)"),
+        "Pharmacy ({raw})",
+        "You were called → Pharmacy ({raw})",
+    ),
+    (
+        re.compile(r"(処置室|検査室|採血室|レントゲン室|待合室|中待合)"),
         "{raw}",
         "You were called → Proceed to {raw}",
     ),
