@@ -146,7 +146,6 @@ fun YobaretaAppScreen(
     onReplay10s: () -> Unit,
     onForceSendClip: () -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
     var kanjiName by remember { mutableStateOf("東海林 太郎") }
@@ -157,11 +156,10 @@ fun YobaretaAppScreen(
             listOf(
                 ReadingOption("ショウジ タロウ", "ショウジ", "一般的"),
                 ReadingOption("トウカイリン タロウ", "トウカイリン", "別読み"),
-                ReadingOption("Shoji Taro", "Shoji", "EN")
+                ReadingOption("SHOH-jee TAH-roh", "SHOH-jee", "Phonetic")
             )
         )
     }
-    var isProposingReadings by remember { mutableStateOf(false) }
     var showManualReadingEdit by remember { mutableStateOf(false) }
 
     var ticketNumber by remember { mutableStateOf("305") }
@@ -180,6 +178,26 @@ fun YobaretaAppScreen(
             languageMode = "auto",
             cloudRunBaseUrl = cloudRunUrl.trim()
         )
+    }
+
+    // Automatically enrich readings via Gemini after a brief typing pause
+    LaunchedEffect(kanjiName) {
+        val trimmed = kanjiName.trim()
+        if (trimmed.isEmpty()) {
+            proposedOptions = emptyList()
+            selectedFullReading = ""
+            selectedSurnameReading = ""
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(450L)
+        val enriched = KanjiReadingProposer.proposeReadings(trimmed)
+        if (enriched.isNotEmpty()) {
+            proposedOptions = enriched
+            if (enriched.none { it.fullReading == selectedFullReading }) {
+                selectedFullReading = enriched.first().fullReading
+                selectedSurnameReading = enriched.first().surnameReading
+            }
+        }
     }
 
     LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, cloudRunUrl) {
@@ -313,43 +331,26 @@ fun YobaretaAppScreen(
                     fontWeight = FontWeight.Bold
                 )
 
-                // Name Input + Inline Gemini Reading Button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = kanjiName,
-                        onValueChange = { kanjiName = it },
-                        label = { Text("Your Name (漢字 / English)") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilledTonalButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                isProposingReadings = true
-                                val suggestions = KanjiReadingProposer.proposeReadings(kanjiName)
-                                if (suggestions.isNotEmpty()) {
-                                    proposedOptions = suggestions
-                                    selectedFullReading = suggestions.first().fullReading
-                                    selectedSurnameReading = suggestions.first().surnameReading
-                                }
-                                isProposingReadings = false
-                            }
-                        },
-                        enabled = !isProposingReadings && kanjiName.isNotBlank(),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.height(54.dp)
-                    ) {
-                        Text(
-                            text = if (isProposingReadings) "..." else "✨ Readings",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+                // Name Input (automatically updates readings as you type)
+                OutlinedTextField(
+                    value = kanjiName,
+                    onValueChange = { newName ->
+                        kanjiName = newName
+                        val instant = KanjiReadingProposer.proposeInstantLocalReadings(newName)
+                        proposedOptions = instant
+                        if (instant.isNotEmpty()) {
+                            selectedFullReading = instant.first().fullReading
+                            selectedSurnameReading = instant.first().surnameReading
+                        } else {
+                            selectedFullReading = ""
+                            selectedSurnameReading = ""
+                        }
+                    },
+                    label = { Text("Your Name (漢字 / English)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 // Compact Horizontal Reading Pills
                 if (proposedOptions.isNotEmpty()) {

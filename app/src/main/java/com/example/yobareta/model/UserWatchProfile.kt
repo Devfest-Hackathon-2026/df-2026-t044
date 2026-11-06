@@ -4,8 +4,8 @@ data class UserWatchProfile(
     val kanjiName: String = "東海林 太郎",
     val selectedFullReading: String = "ショウジ タロウ",
     val selectedSurnameReading: String = "ショウジ",
-    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shoji Taro"),
-    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shoji"),
+    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "SHOH-jee TAH-roh"),
+    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "SHOH-jee"),
     val ticketNumber: String = "",
     val venueMode: String = "auto",     // "auto" (all venues) | "hospital" | "restaurant" | "cafe"
     val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"
@@ -13,10 +13,9 @@ data class UserWatchProfile(
 ) {
     private fun normalizeReadingEntry(entry: String): String {
         val trimmed = entry.replace("　", " ").trim()
-        // Preserve single spaces for Latin/English names ("Alex Smith"), strip spaces for Katakana
         val hasLatin = trimmed.any { it in 'A'..'Z' || it in 'a'..'z' }
         return if (hasLatin) {
-            trimmed.replace(Regex("\\s+"), " ")
+            trimmed.replace("-", "").replace(Regex("\\s+"), " ").trim()
         } else {
             trimmed.replace(" ", "")
         }
@@ -24,10 +23,10 @@ data class UserWatchProfile(
 
     fun allFullNameReadings(): List<String> {
         val list = mutableListOf<String>()
-        list.add(normalizeReadingEntry(selectedFullReading))
         if (kanjiName.any { it in 'A'..'Z' || it in 'a'..'z' }) {
             list.add(normalizeReadingEntry(kanjiName))
         }
+        list.add(normalizeReadingEntry(selectedFullReading))
         for (alt in alternateFullReadings) {
             list.add(normalizeReadingEntry(alt))
         }
@@ -36,6 +35,12 @@ data class UserWatchProfile(
 
     fun allSurnameReadings(): List<String> {
         val list = mutableListOf<String>()
+        if (kanjiName.any { it in 'A'..'Z' || it in 'a'..'z' }) {
+            val words = kanjiName.replace("　", " ").trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (words.isNotEmpty()) {
+                list.add(normalizeReadingEntry(words.last()))
+            }
+        }
         list.add(normalizeReadingEntry(selectedSurnameReading))
         for (alt in alternateSurnameReadings) {
             list.add(normalizeReadingEntry(alt))
