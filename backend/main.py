@@ -50,6 +50,42 @@ app = FastAPI(
 _RECALL_WINDOW_SECONDS = 300.0
 _RECENT_CALL_TIMESTAMPS: Dict[str, float] = {}
 
+# Sliding-window rate limiter to protect Cloud STT / Gemini credits against abuse
+_RATE_WINDOW_SECONDS = 60.0
+_MAX_RECOGNIZE_PER_MINUTE_GLOBAL = int(os.environ.get("MAX_RPM_GLOBAL", "60"))
+_MAX_RECOGNIZE_PER_MINUTE_PER_CLIENT = int(os.environ.get("MAX_RPM_PER_CLIENT", "30"))
+_GLOBAL_REQUEST_TIMESTAMPS: List[float] = []
+_CLIENT_REQUEST_TIMESTAMPS: Dict[str, List[float]] = {}
+
+
+def _enforce_rate_limit(client_key: str) -> None:
+    """Blocks requests exceeding per-client or global RPM before any paid Cloud API is called."""
+    now = time.monotonic()
+    cutoff = now - _RATE_WINDOW_SECONDS
+
+    # Prune global window
+    while _GLOBAL_REQUEST_TIMESTAMPS and _GLOBAL_REQUEST_TIMESTAMPS[0] < cutoff:
+        _GLOBAL_REQUEST_TIMESTAMPS.pop(0)
+    if len(_GLOBAL_REQUEST_TIMESTAMPS) >= _MAX_RECOGNIZE_PER_MINUTE_GLOBAL:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Global rate limit exceeded; please wait a moment.",
+        )
+
+    # Prune client window
+    client_list = _CLIENT_REQUEST_TIMESTAMPS.get(client_key, [])
+    client_list = [ts for ts in client_list if ts >= cutoff]
+    if len(client_list) >= _MAX_RECOGNIZE_PER_MINUTE_PER_CLIENT:
+        _CLIENT_REQUEST_TIMESTAMPS[client_key] = client_list
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Client rate limit exceeded; please wait a moment.",
+        )
+
+    _GLOBAL_REQUEST_TIMESTAMPS.append(now)
+    client_list.append(now)
+    _CLIENT_REQUEST_TIMESTAMPS[client_key] = client_list
+
 
 class RecognizeJsonRequest(BaseModel):
     audio_b64: Optional[str] = Field(
@@ -204,6 +240,8 @@ async def recognize(
 ) -> RecognizeResponse:
     """Transcribes audio segment with chirp_3, matches readings (JA+EN), and verifies with Gemini Flash."""
     t_start = time.perf_counter()
+    client_ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "unknown")).split(",")[0].strip()
+    _enforce_rate_limit(f"{uid_hash}:{client_ip}")
 
     audio_bytes, params = await _parse_recognize_payload(request, audio, metadata)
     if not audio_bytes:
