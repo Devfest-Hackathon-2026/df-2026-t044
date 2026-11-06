@@ -1,3 +1,17 @@
+#Yobareta (呼ばれた)#
+
+##Never miss your turn.## An assistive waiting-room call detector for Deaf, hard-of-hearing, and international individuals.
+
+📌 Overview
+
+Waiting rooms in hospitals, government offices, restaurants, and cafés can be an anxiety-inducing experience if you cannot hear PA announcements or struggle with language barriers.
+
+Yobareta listens in the background for your specific name or ticket number and instantly alerts your phone and smartwatch with an actionable, glanceable prompt:
+
+"You were called → Exam Room 3"
+
+Built for DevFest Hackathon 2026.
+
 DevFest Hackathon 2026 Submission Repository
 This is the final submission repository for your DevFest Hackathon 2026 team. Please ensure that your project code and documentation are uploaded to this repository by the submission deadline.
 
