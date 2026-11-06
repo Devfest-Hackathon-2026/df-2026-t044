@@ -322,12 +322,53 @@ object KanjiReadingProposer {
 
     /**
      * Enriches reading options asynchronously using Gemini via Firebase AI Logic.
+     * Uses an in-RAM cache and skips network calls when the name is already covered locally.
      */
+    private val geminiReadingCache = mutableMapOf<String, List<ReadingOption>>()
+
+    private fun isFullyCoveredLocally(nameInput: String): Boolean {
+        val normalized = nameInput.replace("　", " ").trim()
+        if (normalized.isEmpty()) return true
+        val hasLatin = normalized.any { it in 'A'..'Z' || it in 'a'..'z' }
+        if (hasLatin) {
+            val words = normalized.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            return words.all { w ->
+                val lower = w.lowercase().replace(Regex("[^a-z]"), "")
+                ENGLISH_TO_PHONETIC.containsKey(lower) && ENGLISH_TO_KATAKANA.containsKey(lower)
+            }
+        }
+        // Pure Hiragana or Katakana needs no Gemini call
+        if (normalized.all { it in '\u3040'..'\u30FF' || it == ' ' }) return true
+
+        val parts = normalized.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val surnameKanji: String
+        val givenKanji: String
+        if (parts.size >= 2) {
+            surnameKanji = parts[0]
+            givenKanji = parts.drop(1).joinToString("")
+        } else {
+            val matchedPrefix = MULTI_READING_SURNAMES.keys.firstOrNull { normalized.startsWith(it) }
+                ?: return false
+            surnameKanji = matchedPrefix
+            givenKanji = normalized.removePrefix(matchedPrefix)
+        }
+        val surnameKnown = MULTI_READING_SURNAMES.containsKey(surnameKanji)
+        val givenKnown = givenKanji.isEmpty() ||
+            COMMON_GIVEN_NAMES.containsKey(givenKanji) ||
+            givenKanji.all { it in '\u3040'..'\u30FF' }
+        return surnameKnown && givenKnown
+    }
+
     suspend fun proposeReadings(nameInput: String): List<ReadingOption> = withContext(Dispatchers.IO) {
         val cleaned = nameInput.trim()
         if (cleaned.isEmpty()) return@withContext emptyList()
 
         val localSuggestions = buildLocalFallback(cleaned)
+        if (isFullyCoveredLocally(cleaned)) {
+            return@withContext localSuggestions
+        }
+        geminiReadingCache[cleaned]?.let { return@withContext it }
+
         val isEnglishInput = cleaned.any { it in 'A'..'Z' || it in 'a'..'z' }
 
         try {
@@ -366,8 +407,10 @@ object KanjiReadingProposer {
                 val rawJson = response.text ?: "{}"
                 val parsed = parseJsonReadings(rawJson)
                 if (parsed.isNotEmpty()) {
-                    return@withTimeout (parsed + localSuggestions)
+                    val combined = (parsed + localSuggestions)
                         .distinctBy { it.fullReading.lowercase().replace(" ", "") }
+                    geminiReadingCache[cleaned] = combined
+                    return@withTimeout combined
                 }
                 localSuggestions
             }

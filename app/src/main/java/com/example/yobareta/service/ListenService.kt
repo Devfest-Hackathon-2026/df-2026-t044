@@ -112,6 +112,10 @@ class ListenService : Service() {
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var previouslyCalledInSession = false
+    @Volatile
+    private var isUploadInFlight = false
+    @Volatile
+    private var lastUploadCompletedMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -245,11 +249,17 @@ class ListenService : Service() {
     private fun forceUploadRecent3Seconds() {
         val samples = ringBuffer.readLastSeconds(3.5f)
         if (samples.isNotEmpty()) {
-            uploadCutSegmentAsync(samples)
+            uploadCutSegmentAsync(samples, bypassCooldown = true)
         }
     }
 
-    private fun uploadCutSegmentAsync(segmentShorts: ShortArray) {
+    private fun uploadCutSegmentAsync(segmentShorts: ShortArray, bypassCooldown: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!bypassCooldown && (isUploadInFlight || (now - lastUploadCompletedMs) < 1500L)) {
+            Log.d(TAG, "Skipping segment upload (in-flight or within 1.5s billing cooldown)")
+            return
+        }
+        isUploadInFlight = true
         val pcmBytes = AudioRingBuffer.shortsToPcm16LeBytes(segmentShorts)
         val profileSnapshot = activeProfile
 
@@ -283,6 +293,9 @@ class ListenService : Service() {
                 _uiState.update {
                     it.copy(lastError = "Cloud recognize error: ${e.localizedMessage}")
                 }
+            } finally {
+                lastUploadCompletedMs = android.os.SystemClock.elapsedRealtime()
+                isUploadInFlight = false
             }
         }
     }

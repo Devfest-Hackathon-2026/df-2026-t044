@@ -243,6 +243,10 @@ class Chirp3Recognizer:
         pcm_bytes = strip_wav_header_if_present(audio_bytes)
         if not pcm_bytes:
             return ""
+        # Hard billing guard: cap any single STT request at 10 seconds of 16 kHz 16-bit mono PCM (320,000 bytes)
+        max_pcm_bytes = 16000 * 2 * 10
+        if len(pcm_bytes) > max_pcm_bytes:
+            pcm_bytes = pcm_bytes[:max_pcm_bytes]
 
         explicit_decoding = cloud_speech.ExplicitDecodingConfig(
             encoding=cloud_speech.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
@@ -294,7 +298,9 @@ class Chirp3Recognizer:
         try:
             response = client.recognize(request=request, timeout=6.0)
         except Exception as exc:
-            # Fallback if multi-language or inline adaptation is rejected by a specific recognizer config
+            # Only retry if multi-language or inline adaptation config was rejected (InvalidArgument)
+            if "InvalidArgument" not in type(exc).__name__ and "400" not in str(exc):
+                raise
             logger.warning("Retrying STT recognize with single primary language (%s) and no adaptation", lang_codes[0])
             config_fallback = cloud_speech.RecognitionConfig(
                 explicit_decoding_config=explicit_decoding,
