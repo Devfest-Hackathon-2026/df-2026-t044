@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -16,16 +17,21 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -149,17 +155,18 @@ fun YobaretaAppScreen(
     var proposedOptions by remember {
         mutableStateOf(
             listOf(
-                ReadingOption("ショウジ タロウ", "ショウジ", "一般的な読み"),
+                ReadingOption("ショウジ タロウ", "ショウジ", "一般的"),
                 ReadingOption("トウカイリン タロウ", "トウカイリン", "別読み"),
-                ReadingOption("Shoji Taro", "Shoji", "English / Romaji")
+                ReadingOption("Shoji Taro", "Shoji", "EN")
             )
         )
     }
     var isProposingReadings by remember { mutableStateOf(false) }
+    var showManualReadingEdit by remember { mutableStateOf(false) }
 
     var ticketNumber by remember { mutableStateOf("305") }
     var cloudRunUrl by remember { mutableStateOf(AppConfig.DEFAULT_CLOUD_RUN_BASE_URL) }
-    var showAdvancedConfig by remember { mutableStateOf(false) }
+    var showJudgeDrawer by remember { mutableStateOf(false) }
 
     fun buildCurrentProfile(): UserWatchProfile {
         return UserWatchProfile(
@@ -179,14 +186,27 @@ fun YobaretaAppScreen(
         ListenService.activeProfile = buildCurrentProfile()
     }
 
+    // Full-Screen Takeover when a full 'called' or 'recall' alert fires
+    val activeAlert = serviceState.latestAlert
+    if (activeAlert != null && (activeAlert.tier == "called" || activeAlert.tier == "recall")) {
+        FullScreenCallAlert(
+            alert = activeAlert,
+            hasReplayClip = serviceState.hasReplayable10sClip,
+            isReplaying = serviceState.isReplayingAudio,
+            onReplay10s = onReplay10s,
+            onDismiss = onDismissAlert
+        )
+        return
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Header
+        // 1. Minimalist App Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -194,35 +214,47 @@ fun YobaretaAppScreen(
         ) {
             Column {
                 Text(
-                    text = "Yobareta (呼ばれた)",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "Yobareta",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.ExtraBold
                 )
                 Text(
-                    text = "Waiting Room Call Detector (JA + EN) • Phone + Watch",
+                    text = "呼ばれた • Waiting Room Call Alert",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            AssistChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = if (serviceState.isListening) "● LISTENING" else "IDLE",
-                        fontWeight = FontWeight.Bold
+
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (serviceState.isListening) Color(0xFF1B5E20) else MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(if (serviceState.isListening) Color(0xFF69F0AE) else Color.Gray)
                     )
-                },
-                colors = AssistChipDefaults.assistChipColors(
-                    containerColor = if (serviceState.isListening) Color(0xFF1B5E20) else MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = if (serviceState.isListening) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            )
+                    Text(
+                        text = if (serviceState.isListening) "LISTENING" else "READY",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (serviceState.isListening) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         // 2. Loud Network Drop Warning Banner ("Never fail silently")
         if (!serviceState.isNetworkAvailable) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFB71C1C)),
+                shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -230,22 +262,22 @@ fun YobaretaAppScreen(
                         text = "⚠️ NETWORK CONNECTION LOST",
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp
+                        fontSize = 17.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Yobareta cannot verify announcements while offline. Please check Wi-Fi or mobile data immediately.",
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "Cannot verify announcements while offline. Please reconnect Wi-Fi or mobile data.",
+                        color = Color.White.copy(alpha = 0.92f),
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
         }
 
-        // 3. Full-Screen Flash / High-Contrast Alert Banner when Possible / Called / Re-call fires
-        serviceState.latestAlert?.let { alert ->
-            AlertFlashBanner(
-                alert = alert,
+        // 3. Subtle Amber Banner for Tier 1 'Possible' (Surname-Only Match)
+        if (activeAlert != null && activeAlert.tier == "possible") {
+            PossibleSurnameBanner(
+                alert = activeAlert,
                 hasReplayClip = serviceState.hasReplayable10sClip,
                 isReplaying = serviceState.isReplayingAudio,
                 onReplay10s = onReplay10s,
@@ -253,76 +285,35 @@ fun YobaretaAppScreen(
             )
         }
 
-        // 4. Primary Start / Stop Listening Action
-        if (!isMicGranted) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Microphone & Notification Permissions Required",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Text(
-                        text = "Yobareta processes audio in a 15-second RAM buffer on-device and sends only 2–8s speech segments.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Button(
-                        onClick = onRequestPermissions,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Grant Microphone & Alert Permissions")
-                    }
-                }
-            }
-        } else {
-            Button(
-                onClick = {
-                    if (serviceState.isListening) {
-                        onStopListening()
-                    } else {
-                        onStartListening(buildCurrentProfile())
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (serviceState.isListening) Color(0xFFC62828) else Color(0xFF1565C0)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = if (serviceState.isListening) "■ STOP LISTENING" else "▶ START LISTENING (Warms Cloud Run)",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-            }
-        }
+        // 4. Hero Listening Status & Action Card
+        ListeningHeroCard(
+            isMicGranted = isMicGranted,
+            serviceState = serviceState,
+            kanjiName = kanjiName,
+            selectedFullReading = selectedFullReading,
+            ticketNumber = ticketNumber,
+            onRequestPermissions = onRequestPermissions,
+            onStartListening = { onStartListening(buildCurrentProfile()) },
+            onStopListening = onStopListening
+        )
 
-        // 5. Name & Ticket Trigger Setup Card
+        // 5. Streamlined 2-Field Setup Card (Name + Ticket #)
         Card(
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier.padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "1. Name & Ticket Setup",
+                    text = "Who should we listen for?",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
-                // Kanji or English Name + Gemini Reading Proposer
+                // Name Input + Inline Gemini Reading Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -331,11 +322,12 @@ fun YobaretaAppScreen(
                     OutlinedTextField(
                         value = kanjiName,
                         onValueChange = { kanjiName = it },
-                        label = { Text("Name (Kanji or English / 氏名)") },
+                        label = { Text("Your Name (漢字 / English)") },
                         singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
-                    Button(
+                    FilledTonalButton(
                         onClick = {
                             coroutineScope.launch {
                                 isProposingReadings = true
@@ -348,190 +340,318 @@ fun YobaretaAppScreen(
                                 isProposingReadings = false
                             }
                         },
-                        enabled = !isProposingReadings && kanjiName.isNotBlank()
+                        enabled = !isProposingReadings && kanjiName.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.height(54.dp)
                     ) {
-                        Text(if (isProposingReadings) "..." else "✨ Readings")
+                        Text(
+                            text = if (isProposingReadings) "..." else "✨ Readings",
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
-                // Proposed reading chips (supports both Katakana and English readings)
+                // Compact Horizontal Reading Pills
                 if (proposedOptions.isNotEmpty()) {
-                    Text(
-                        text = "Select primary reading (all variants stay active):",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         proposedOptions.forEach { option ->
                             val isSelected = selectedFullReading == option.fullReading
-                            OutlinedButton(
+                            FilterChip(
+                                selected = isSelected,
                                 onClick = {
                                     selectedFullReading = option.fullReading
                                     selectedSurnameReading = option.surnameReading
                                 },
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
+                                label = {
                                     Text(
-                                        text = "${option.fullReading} (Surname: ${option.surnameReading})",
+                                        text = if (option.note.isNotEmpty()) {
+                                            "${option.fullReading} (${option.note})"
+                                        } else {
+                                            option.fullReading
+                                        },
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
-                                    if (option.note.isNotEmpty()) {
-                                        Text(
-                                            text = option.note,
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
                                 }
-                            }
+                            )
                         }
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = selectedFullReading,
-                        onValueChange = { selectedFullReading = it },
-                        label = { Text("Full Reading (Kana/EN)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = selectedSurnameReading,
-                        onValueChange = { selectedSurnameReading = it },
-                        label = { Text("Surname (Possible)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(0.8f)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = ticketNumber,
-                    onValueChange = { ticketNumber = it },
-                    label = { Text("Ticket / Order Number (番号札 e.g. 305, A-12)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // 6. On-Device Gate & Privacy Telemetry Card (Live Proof for Judges)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+                // Optional Manual Reading Toggle (hidden by default to keep UI clean)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "2. On-Device Gate & Privacy Telemetry",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "Active reading: $selectedFullReading (Surname: $selectedSurnameReading)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = if (serviceState.usingYamnetModel) "YAMNet + RMS" else "DSP VAD + RMS",
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-
-                Text(
-                    text = "15 s ring buffer in RAM only (never written to disk) • 1 s pre-roll",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = String.format(
-                            Locale.US,
-                            "Mic: %.1f dBFS (Ambient: %.1f dBFS)",
-                            serviceState.currentDbFs,
-                            serviceState.ambientBaselineDbFs
-                        ),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = if (serviceState.isCapturingSegment) "🟢 CUTTING 2–8s CLIP" else "⚪ GATE CLOSED",
+                        text = if (showManualReadingEdit) "Done" else "Edit",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
-                        color = if (serviceState.isCapturingSegment) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                        modifier = Modifier
+                            .clickable { showManualReadingEdit = !showManualReadingEdit }
+                            .padding(4.dp)
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = String.format(
-                            Locale.US,
-                            "Audio Sent to Cloud: %.1f%% (%d clips)",
-                            serviceState.percentAudioSent,
-                            serviceState.segmentsUploadedCount
-                        ),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = serviceState.warmStatus,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                if (serviceState.isListening) {
-                    OutlinedButton(
-                        onClick = onForceSendClip,
-                        modifier = Modifier.fillMaxWidth()
+                AnimatedVisibility(visible = showManualReadingEdit) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Send Recent 3.5s Audio Segment Now (Manual Test)")
+                        OutlinedTextField(
+                            value = selectedFullReading,
+                            onValueChange = { selectedFullReading = it },
+                            label = { Text("Full Reading") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = selectedSurnameReading,
+                            onValueChange = { selectedSurnameReading = it },
+                            label = { Text("Surname") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.75f)
+                        )
                     }
                 }
 
-                serviceState.lastError?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                // Ticket / Order Number Input
+                OutlinedTextField(
+                    value = ticketNumber,
+                    onValueChange = { ticketNumber = it },
+                    label = { Text("Ticket / Order # (番号札 — Optional, e.g. 305)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
 
-                TextButton(
-                    onClick = { showAdvancedConfig = !showAdvancedConfig }
+        // 6. Collapsible Judge Telemetry & Developer Drawer
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showJudgeDrawer = !showJudgeDrawer }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(if (showAdvancedConfig) "Hide Cloud Run Endpoint Config" else "Configure Cloud Run URL & Auth Info")
-                }
-
-                if (showAdvancedConfig) {
-                    OutlinedTextField(
-                        value = cloudRunUrl,
-                        onValueChange = { newUrl: String -> cloudRunUrl = newUrl },
-                        label = { Text("Cloud Run Base URL (asia-northeast1)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                    Text(
+                        text = "🔍 Judge Telemetry & Test Tools",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = authStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (showJudgeDrawer) "Hide ▲" else "Show ▼",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                AnimatedVisibility(visible = showJudgeDrawer) {
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = String.format(
+                                Locale.US,
+                                "Gate: %s • Mic: %.1f dBFS (Ambient: %.1f dBFS)",
+                                if (serviceState.usingYamnetModel) "YAMNet + RMS" else "DSP VAD + RMS",
+                                serviceState.currentDbFs,
+                                serviceState.ambientBaselineDbFs
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = String.format(
+                                Locale.US,
+                                "Audio Sent to Cloud: %.1f%% (%d clips) • %s",
+                                serviceState.percentAudioSent,
+                                serviceState.segmentsUploadedCount,
+                                serviceState.warmStatus
+                            ),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        if (serviceState.isListening) {
+                            OutlinedButton(
+                                onClick = onForceSendClip,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Send Recent 3.5s Audio Segment Now")
+                            }
+                        }
+
+                        serviceState.lastError?.let { err ->
+                            Text(
+                                text = err,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = cloudRunUrl,
+                            onValueChange = { newUrl: String -> cloudRunUrl = newUrl },
+                            label = { Text("Cloud Run Base URL (asia-northeast1)") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = authStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ListeningHeroCard(
+    isMicGranted: Boolean,
+    serviceState: ListenServiceUiState,
+    kanjiName: String,
+    selectedFullReading: String,
+    ticketNumber: String,
+    onRequestPermissions: () -> Unit,
+    onStartListening: () -> Unit,
+    onStopListening: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (serviceState.isListening) {
+                Color(0xFF0D3B2E)
+            } else {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            val targetSummary = buildString {
+                if (kanjiName.isNotBlank()) {
+                    append(kanjiName.trim())
+                    if (selectedFullReading.isNotBlank()) append(" ($selectedFullReading)")
+                }
+                if (ticketNumber.isNotBlank()) {
+                    if (isNotEmpty()) append("  •  ")
+                    append("#${ticketNumber.trim()}")
+                }
+            }.ifEmpty { "Enter your name or ticket number below" }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = if (serviceState.isListening) "Listening for your call…" else "Ready to listen for",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (serviceState.isListening) Color(0xFFA7F3D0) else MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = targetSummary,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (serviceState.isListening) Color.White else MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+
+            if (serviceState.isListening) {
+                // Visual Audio Level Bar (normalized from [-65 dBFS .. -15 dBFS] to [0f .. 1f])
+                val normalizedLevel = ((serviceState.currentDbFs + 65f) / 50f).coerceIn(0.04f, 1f)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LinearProgressIndicator(
+                        progress = { normalizedLevel },
+                        color = if (serviceState.isCapturingSegment) Color(0xFF69F0AE) else Color(0xFF38BDF8),
+                        trackColor = Color.White.copy(alpha = 0.18f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (serviceState.isCapturingSegment) {
+                                "🟢 Speech detected — checking call…"
+                            } else {
+                                "🔒 Filtering background noise in RAM"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                        Text(
+                            text = String.format(
+                                Locale.US,
+                                "Only %.1f%% audio sent",
+                                serviceState.percentAudioSent
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFA7F3D0),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            if (!isMicGranted) {
+                Button(
+                    onClick = onRequestPermissions,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                ) {
+                    Text("Grant Microphone & Notification Permissions", fontWeight = FontWeight.Bold)
+                }
+            } else {
+                Button(
+                    onClick = if (serviceState.isListening) onStopListening else onStartListening,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (serviceState.isListening) Color(0xFFD32F2F) else Color(0xFF1565C0),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                ) {
+                    Text(
+                        text = if (serviceState.isListening) "■ Stop Listening" else "▶ Start Listening",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -540,98 +660,44 @@ fun YobaretaAppScreen(
 }
 
 @Composable
-fun AlertFlashBanner(
+fun PossibleSurnameBanner(
     alert: RecognizeAlertResult,
     hasReplayClip: Boolean,
     isReplaying: Boolean,
     onReplay10s: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val isFullAlert = alert.tier == "called" || alert.tier == "recall"
-    val infiniteTransition = rememberInfiniteTransition(label = "alertFlash")
-
-    val primaryColor = when (alert.tier) {
-        "recall" -> Color(0xFFB71C1C)   // Urgent Crimson
-        "called" -> Color(0xFF00695C)   // High-Contrast Emerald
-        else -> Color(0xFFE65100)       // Amber for Possible (Surname-only)
-    }
-    val secondaryColor = when (alert.tier) {
-        "recall" -> Color(0xFFFF8F00)
-        "called" -> Color(0xFF2E7D32)
-        else -> Color(0xFFF57C00)
-    }
-
-    val animatedBg by infiniteTransition.animateColor(
-        initialValue = primaryColor,
-        targetValue = if (isFullAlert) secondaryColor else primaryColor,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 550, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bgFlash"
-    )
-
-    val tierLabel = when (alert.tier) {
-        "recall" -> "🚨 URGENT RE-CALL (再度お呼び出し)"
-        "called" -> "✅ YOU WERE CALLED (お呼び出し)"
-        else -> "🔔 POSSIBLE CALL — SURNAME ONLY (姓のみ一致)"
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(animatedBg, shape = RoundedCornerShape(16.dp))
-            .border(3.dp, Color.White, shape = RoundedCornerShape(16.dp))
-            .padding(20.dp)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE65100))
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(
-                text = tierLabel,
+                text = "🔔 POSSIBLE CALL — SURNAME MATCH (${alert.matchedTrigger})",
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 15.sp
+                style = MaterialTheme.typography.labelLarge
             )
-
             Text(
-                text = alert.instructionPlain.ifEmpty {
-                    if (alert.destination.isNotEmpty()) {
-                        "You were called → ${alert.destination}"
-                    } else {
-                        "You were called!"
-                    }
-                },
+                text = alert.instructionPlain.ifEmpty { "Surname matched — check if this call is for you" },
                 color = Color.White,
-                fontWeight = FontWeight.Black,
-                fontSize = 26.sp,
-                lineHeight = 32.sp
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
             )
-
-            if (alert.destination.isNotEmpty()) {
-                Text(
-                    text = "Destination: ${alert.destination}",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            }
-
             if (alert.transcriptMasked.isNotEmpty()) {
                 Text(
-                    text = "Announcement: 「${alert.transcriptMasked}」",
-                    color = Color.White.copy(alpha = 0.92f),
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "「${alert.transcriptMasked}」",
+                    color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
-
-            Text(
-                text = "Matched: ${alert.matchedTrigger} • Score: ${String.format(Locale.US, "%.2f", alert.score)} • Latency: ${alert.latencyMs} ms",
-                color = Color.White.copy(alpha = 0.85f),
-                style = MaterialTheme.typography.labelMedium
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (hasReplayClip) {
                     Button(
@@ -643,9 +709,154 @@ fun AlertFlashBanner(
                         ),
                         modifier = Modifier.weight(1f)
                     ) {
+                        Text(if (isReplaying) "🔊 Replaying…" else "🔊 Replay 10s", fontWeight = FontWeight.Bold)
+                    }
+                }
+                OutlinedButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Dismiss")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FullScreenCallAlert(
+    alert: RecognizeAlertResult,
+    hasReplayClip: Boolean,
+    isReplaying: Boolean,
+    onReplay10s: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "fullScreenAlertFlash")
+    val isRecall = alert.tier == "recall"
+
+    val primaryColor = if (isRecall) Color(0xFFB71C1C) else Color(0xFF00695C)
+    val secondaryColor = if (isRecall) Color(0xFFE65100) else Color(0xFF2E7D32)
+
+    val animatedBg by infiniteTransition.animateColor(
+        initialValue = primaryColor,
+        targetValue = secondaryColor,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 550, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fullScreenBg"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(animatedBg)
+            .padding(24.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Top Tier Badge
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.28f),
+                modifier = Modifier.padding(top = 16.dp)
+            ) {
+                Text(
+                    text = if (isRecall) "🚨 URGENT RE-CALL • 再度お呼び出し" else "✅ YOU WERE CALLED • お呼び出し",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
+                )
+            }
+
+            // Centerpiece Destination & Instruction
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                if (alert.destination.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.White,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(vertical = 22.dp, horizontal = 16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "GO TO DESTINATION",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.DarkGray,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = alert.destination,
+                                color = Color.Black,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 32.sp,
+                                lineHeight = 38.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = alert.instructionPlain.ifEmpty { "You were called!" },
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 26.sp,
+                    lineHeight = 32.sp,
+                    textAlign = TextAlign.Center
+                )
+
+                if (alert.transcriptMasked.isNotEmpty()) {
+                    Text(
+                        text = "「${alert.transcriptMasked}」",
+                        color = Color.White.copy(alpha = 0.92f),
+                        fontSize = 17.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Text(
+                    text = "Matched: ${alert.matchedTrigger} • Latency: ${alert.latencyMs} ms",
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+
+            // Bottom Action Buttons (10s Replay + Dismiss)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (hasReplayClip) {
+                    Button(
+                        onClick = onReplay10s,
+                        enabled = !isReplaying,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor = Color.Black
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                    ) {
                         Text(
-                            text = if (isReplaying) "🔊 Replaying..." else "🔊 Replay Last 10s",
-                            fontWeight = FontWeight.Bold
+                            text = if (isReplaying) "🔊 Replaying Last 10s Audio…" else "🔊 Replay Last 10s Audio",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
                 }
@@ -656,9 +867,17 @@ fun AlertFlashBanner(
                         containerColor = Color.Black.copy(alpha = 0.25f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.weight(1f)
+                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp)
                 ) {
-                    Text("Dismiss / Stop Buzz", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "✓ I'm On My Way (Stop Buzz)",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
