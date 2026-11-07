@@ -31,6 +31,7 @@ import com.example.yobareta.audio.OnDeviceAudioGate
 import com.example.yobareta.model.RecognizeAlertResult
 import com.example.yobareta.model.UserWatchProfile
 import com.example.yobareta.net.YobaretaCloudClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -232,6 +233,8 @@ class ListenService : Service() {
                         }
                     }
                 }
+            } catch (e: CancellationException) {
+                // Normal service stop
             } catch (e: Exception) {
                 Log.e(TAG, "Error in audio capture loop", e)
                 _uiState.update { it.copy(lastError = "Audio capture error: ${e.message}") }
@@ -287,7 +290,11 @@ class ListenService : Service() {
                         )
                     }
                     alertEngine.triggerAlert(result)
+                } else {
+                    _uiState.update { it.copy(lastError = null) }
                 }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Segment upload cancelled on stop")
             } catch (e: Exception) {
                 Log.w(TAG, "Segment recognize failed: ${e.message}")
                 _uiState.update {
