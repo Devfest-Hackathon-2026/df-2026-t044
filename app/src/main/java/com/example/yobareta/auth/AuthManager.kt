@@ -50,10 +50,15 @@ class AuthManager {
     }
 
     suspend fun getIdToken(forceRefresh: Boolean = false): String {
-        ensureAuthenticated()
-        val user = auth.currentUser ?: throw IllegalStateException("No authenticated Firebase user.")
-        val tokenResult = user.getIdToken(forceRefresh).await()
-        return tokenResult.token ?: throw IllegalStateException("Firebase ID token was null.")
+        return try {
+            ensureAuthenticated()
+            val user = auth.currentUser ?: throw IllegalStateException("No authenticated Firebase user.")
+            val tokenResult = user.getIdToken(forceRefresh).await()
+            tokenResult.token ?: "unregistered-id-token"
+        } catch (e: Exception) {
+            Log.w(TAG, "Firebase ID token fetch skipped/failed (using API secret header if configured): ${e.message}")
+            "anonymous-auth-disabled"
+        }
     }
 
     suspend fun getAppCheckToken(forceRefresh: Boolean = false): String {
