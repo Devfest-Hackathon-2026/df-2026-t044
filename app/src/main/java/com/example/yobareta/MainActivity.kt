@@ -152,6 +152,7 @@ fun YobaretaAppScreen(
     var kanjiName by remember { mutableStateOf("東海林 太郎") }
     var selectedFullReading by remember { mutableStateOf("ショウジ タロウ") }
     var selectedSurnameReading by remember { mutableStateOf("ショウジ") }
+    var selectedGivenReading by remember { mutableStateOf("タロウ") }
     var proposedOptions by remember {
         mutableStateOf(
             listOf(
@@ -180,12 +181,19 @@ fun YobaretaAppScreen(
         } else {
             selectedSurnameReading.trim()
         }
+        val primaryGiven = if (KanjiReadingProposer.isPhoneticRespelling(selectedGivenReading)) {
+            ""
+        } else {
+            selectedGivenReading.trim()
+        }
         return UserWatchProfile(
             kanjiName = kanjiName.trim(),
             selectedFullReading = primaryFull,
             selectedSurnameReading = primarySurname,
+            selectedGivenReading = primaryGiven,
             alternateFullReadings = fullHints,
             alternateSurnameReadings = surnameHints,
+            alternateGivenReadings = if (primaryGiven.isNotEmpty()) listOf(primaryGiven) else emptyList(),
             ticketNumber = ticketNumber.trim(),
             venueMode = "auto",
             languageMode = "auto",
@@ -209,11 +217,14 @@ fun YobaretaAppScreen(
             if (enriched.none { it.fullReading == selectedFullReading }) {
                 selectedFullReading = enriched.first().fullReading
                 selectedSurnameReading = enriched.first().surnameReading
+                val fClean = enriched.first().fullReading.replace("　", " ").trim()
+                val sClean = enriched.first().surnameReading.replace("　", " ").trim()
+                selectedGivenReading = fClean.replace(sClean, "").trim()
             }
         }
     }
 
-    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, ticketNumber, cloudRunUrl) {
+    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, selectedGivenReading, ticketNumber, cloudRunUrl) {
         ListenService.activeProfile = buildCurrentProfile()
     }
 
@@ -354,9 +365,13 @@ fun YobaretaAppScreen(
                         if (instant.isNotEmpty()) {
                             selectedFullReading = instant.first().fullReading
                             selectedSurnameReading = instant.first().surnameReading
+                            val fClean = instant.first().fullReading.replace("　", " ").trim()
+                            val sClean = instant.first().surnameReading.replace("　", " ").trim()
+                            selectedGivenReading = fClean.replace(sClean, "").trim()
                         } else {
                             selectedFullReading = ""
                             selectedSurnameReading = ""
+                            selectedGivenReading = ""
                         }
                     },
                     label = { Text("Your Name (漢字 / English)") },
@@ -381,6 +396,9 @@ fun YobaretaAppScreen(
                                 onClick = {
                                     selectedFullReading = option.fullReading
                                     selectedSurnameReading = option.surnameReading
+                                    val fClean = option.fullReading.replace("　", " ").trim()
+                                    val sClean = option.surnameReading.replace("　", " ").trim()
+                                    selectedGivenReading = fClean.replace(sClean, "").trim()
                                 },
                                 label = {
                                     Text(
@@ -404,7 +422,7 @@ fun YobaretaAppScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Active reading: $selectedFullReading (Surname: $selectedSurnameReading)",
+                        text = "Active: $selectedFullReading (Surname: $selectedSurnameReading, First: $selectedGivenReading)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -436,6 +454,14 @@ fun YobaretaAppScreen(
                             value = selectedSurnameReading,
                             onValueChange = { selectedSurnameReading = it },
                             label = { Text("Surname") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(0.75f)
+                        )
+                        OutlinedTextField(
+                            value = selectedGivenReading,
+                            onValueChange = { selectedGivenReading = it },
+                            label = { Text("First Name") },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(0.75f)

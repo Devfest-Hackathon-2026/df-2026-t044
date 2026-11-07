@@ -123,6 +123,7 @@ def build_inline_phrase_list(
     ticket_number: Optional[str] = None,
     venue_mode: str = "hospital",
     language_codes: Sequence[str] = ("ja-JP", "en-US"),
+    given_name_readings: Optional[Sequence[str]] = None,
 ) -> List[str]:
     """Builds an inline list of phrases to bias STT toward the user's name & venue terms."""
     phrases: List[str] = []
@@ -158,6 +159,17 @@ def build_inline_phrase_list(
         elif include_ja:
             _add(f"{r}様")
             _add(f"{r}さん")
+
+    for r in (given_name_readings or []):
+        _add(r)
+        if re.search(r"[A-Za-z]", r):
+            _add(f"Mr. {r}")
+            _add(f"Ms. {r}")
+        elif include_ja:
+            _add(f"{r}様")
+            _add(f"{r}さん")
+            _add(f"{r}ちゃん")
+            _add(f"{r}くん")
 
     if ticket_number:
         num = ticket_number.strip()
@@ -235,6 +247,7 @@ class Chirp3Recognizer:
         ticket_number: Optional[str] = None,
         venue_mode: str = "hospital",
         language_mode: str = "auto",
+        given_name_readings: Optional[Sequence[str]] = None,
     ) -> str:
         """Transcribes 16 kHz mono 16-bit LINEAR16 audio using chirp_3 (ja-JP / en-US).
 
@@ -271,6 +284,7 @@ class Chirp3Recognizer:
                 ticket_number=ticket_number,
                 venue_mode=venue_mode,
                 language_codes=lang_codes,
+                given_name_readings=given_name_readings,
             )
             if phrases:
                 adaptation = cloud_speech.SpeechAdaptation(

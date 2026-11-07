@@ -98,6 +98,7 @@ class Stage2GeminiVerifier:
         ticket_number: Optional[str],
         venue_mode: str,
         stage1: MatchResult,
+        given_name_readings: Optional[Sequence[str]] = None,
     ) -> Stage2Result:
         client = self.get_client()
         if client is None:
@@ -116,6 +117,7 @@ class Stage2GeminiVerifier:
                 "user_profile": {
                     "kanji_name": kanji_name or "",
                     "full_name_readings": list(full_name_readings),
+                    "given_name_readings": list(given_name_readings or []),
                     "surname_readings": list(surname_readings),
                     "ticket_number": ticket_number or "",
                 },
@@ -183,6 +185,7 @@ class Stage2GeminiVerifier:
         ticket_number: Optional[str],
         venue_mode: str,
         stage1: MatchResult,
+        given_name_readings: Optional[Sequence[str]] = None,
     ) -> Stage2Result:
         """Runs Stage 2 Gemini Flash with a hard 2.5s timeout and automatic fallback."""
         try:
@@ -196,6 +199,7 @@ class Stage2GeminiVerifier:
                     ticket_number,
                     venue_mode,
                     stage1,
+                    given_name_readings,
                 ),
                 timeout=self.timeout_seconds,
             )

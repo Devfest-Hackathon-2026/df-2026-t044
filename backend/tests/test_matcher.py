@@ -224,3 +224,61 @@ def test_open_ended_custom_destinations_ja_and_en():
     assert res_en.destination == "4th Floor MRI Suite"
     assert res_en.instruction_plain == "You were called → 4th Floor MRI Suite"
 
+
+
+def test_first_name_recognition_ja_and_en():
+    # 1. English first-name call with destination
+    res_en = evaluate_transcript(
+        transcript="Alex, please proceed to Exam Room 3.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+        kanji_name="Alex Smith",
+        venue_mode="hospital",
+    )
+    assert res_en.tier == "called"
+    assert res_en.match_type == "given_name"
+    assert res_en.destination == "Exam Room 3"
+
+    # 2. English first-name call in cafe
+    res_cafe = evaluate_transcript(
+        transcript="Alex, your drink is ready at the pickup counter.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+        kanji_name="Alex Smith",
+        venue_mode="cafe",
+    )
+    assert res_cafe.tier == "called"
+    assert res_cafe.match_type == "given_name"
+    assert res_cafe.destination == "Pickup Counter"
+
+    # 3. Japanese first-name call (太郎さん)
+    res_ja = evaluate_transcript(
+        transcript="太郎さん、3番診察室へお入りください。",
+        full_name_readings=["ショウジタロウ"],
+        surname_readings=["ショウジ"],
+        kanji_name="東海林 太郎",
+        venue_mode="hospital",
+    )
+    assert res_ja.tier == "called"
+    assert res_ja.match_type == "given_name"
+    assert "3番診察室" in res_ja.destination
+
+    # 4. Conflicting surname distractor (Alex Johnson when user is Alex Smith)
+    res_dist_en = evaluate_transcript(
+        transcript="Alex Johnson, please proceed to Room 4.",
+        full_name_readings=["Alex Smith"],
+        surname_readings=["Smith"],
+        kanji_name="Alex Smith",
+        venue_mode="hospital",
+    )
+    assert res_dist_en.tier == "none"
+
+    # 5. Conflicting surname distractor (田中太郎 when user is 佐藤太郎)
+    res_dist_ja = evaluate_transcript(
+        transcript="田中太郎様、3番診察室へお入りください。",
+        full_name_readings=["サトウタロウ"],
+        surname_readings=["サトウ"],
+        kanji_name="佐藤 太郎",
+        venue_mode="hospital",
+    )
+    assert res_dist_ja.tier == "none"

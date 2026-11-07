@@ -689,6 +689,53 @@ def mask_transcript(transcript: str, matched_surface: str, kanji_name: Optional[
     return masked
 
 
+def derive_given_name_readings(
+    full_name_readings: Sequence[str],
+    surname_readings: Sequence[str],
+    kanji_name: Optional[str] = None,
+) -> List[str]:
+    """Derives first/given name readings from full name and surname readings if not provided explicitly."""
+    derived: List[str] = []
+    if kanji_name:
+        parts = re.split(r"[\s　]+", kanji_name.strip())
+        if len(parts) >= 2:
+            if re.search(r"[A-Za-z]", kanji_name):
+                derived.append(parts[0])
+            else:
+                derived.append(parts[-1])
+
+    for full in full_name_readings:
+        if not full:
+            continue
+        full_clean = re.sub(r"[\s　]+", " ", full.strip())
+        for sur in surname_readings:
+            if not sur:
+                continue
+            sur_clean = re.sub(r"[\s　]+", " ", sur.strip())
+            words = full_clean.split(" ")
+            if len(words) >= 2:
+                for w in words:
+                    if w.lower() != sur_clean.lower() and len(w) >= 2:
+                        derived.append(w)
+            no_space_full = re.sub(r"[\s　]+", "", full)
+            no_space_sur = re.sub(r"[\s　]+", "", sur)
+            if no_space_full.startswith(no_space_sur) and len(no_space_full) > len(no_space_sur):
+                rem = no_space_full[len(no_space_sur):]
+                if len(rem) >= 2:
+                    derived.append(rem)
+            elif no_space_full.endswith(no_space_sur) and len(no_space_full) > len(no_space_sur):
+                rem = no_space_full[:-len(no_space_sur)]
+                if len(rem) >= 2:
+                    derived.append(rem)
+
+    out: List[str] = []
+    for d in derived:
+        d_clean = d.strip()
+        if d_clean and d_clean not in out:
+            out.append(d_clean)
+    return out
+
+
 def evaluate_transcript(
     transcript: str,
     full_name_readings: Sequence[str],
@@ -699,6 +746,9 @@ def evaluate_transcript(
     full_name_threshold: float = 0.85,
     surname_threshold: float = 0.90,
     stage2_candidate_floor: float = 0.72,
+    given_name_readings: Optional[Sequence[str]] = None,
+    given_name_threshold: float = 0.85,
+    venue_mode: str = "auto",
 ) -> MatchResult:
     """Runs the Stage 1 deterministic matcher on an STT transcript (Japanese + English)."""
     cleaned_tx = (transcript or "").strip()
@@ -781,7 +831,66 @@ def evaluate_transcript(
             best_full_surface = surface
             best_full_honorific = has_hon
 
-    # 3. Surname-only reading evaluation (Japanese Morae + English/Latin Phonetic)
+    # 3. Given name reading evaluation (Japanese Morae + English/Latin Phonetic)
+    effective_given_readings = list(given_name_readings or [])
+    if not effective_given_readings:
+        effective_given_readings = derive_given_name_readings(
+            effective_full_readings, surname_readings, kanji_name
+        )
+
+    best_given_score = 0.0
+    best_given_reading = ""
+    best_given_surface = ""
+    best_given_honorific = False
+
+    for reading in effective_given_readings:
+        if not reading or not reading.strip():
+            continue
+        mora_score, mora_surf, mora_hon = best_sliding_mora_match(tokens, reading)
+        latin_score, latin_surf, latin_hon = best_sliding_latin_match(cleaned_tx, reading)
+
+        if latin_score > mora_score:
+            score, surface, has_hon = latin_score, latin_surf, latin_hon
+        else:
+            score, surface, has_hon = mora_score, mora_surf, mora_hon
+
+        if len(reading) >= 2 and reading in tx_no_space:
+            score = max(score, 1.0)
+            surface = surface or reading
+            if any(f"{reading}{h}" in tx_no_space for h in ("様", "さん", "さま", "ちゃん", "くん")):
+                has_hon = True
+
+        # Guard against different full name distractors in English (e.g. Alex Johnson when user is Alex Smith)
+        if surface and re.search(r"[A-Za-z]", surface):
+            pat = re.compile(rf"\b{re.escape(surface)}\s+([A-Z][a-z]+)\b")
+            m_next = pat.search(cleaned_tx)
+            if m_next:
+                next_word = m_next.group(1)
+                if (
+                    next_word.lower() not in _ENGLISH_TITLES
+                    and not any(next_word.lower() == s.lower() for s in surname_readings)
+                    and not re.match(r"^(please|proceed|come|room|counter|table|door|here|your)$", next_word, re.I)
+                ):
+                    score = 0.0
+
+        # Guard against different full name distractors in Japanese (e.g. 田中太郎 when user is 佐藤太郎)
+        if surface and any("぀" <= c <= "ヿ" or "一" <= c <= "鿿" for c in surface):
+            surf_no_sp = re.sub(r"[\s　]+", "", surface)
+            if surf_no_sp in tx_no_space:
+                idx = tx_no_space.find(surf_no_sp)
+                if idx >= 2:
+                    prefix_cand = tx_no_space[max(0, idx - 4) : idx]
+                    if re.search(r"[一-鿿]{2,4}$", prefix_cand):
+                        if not any(s in prefix_cand for s in surname_readings) and not (kanji_name and any(s in prefix_cand for s in kanji_name.split())):
+                            score = 0.0
+
+        if score > best_given_score:
+            best_given_score = score
+            best_given_reading = reading.strip()
+            best_given_surface = surface
+            best_given_honorific = has_hon
+
+    # 4. Surname-only reading evaluation (Japanese Morae + English/Latin Phonetic)
     best_surname_score = 0.0
     best_surname_reading = ""
     best_surname_surface = ""
@@ -825,6 +934,38 @@ def evaluate_transcript(
             candidate_for_stage2=not bool(destination),
             debug_details={
                 "full_score": round(best_full_score, 4),
+                "given_score": round(best_given_score, 4),
+                "surname_score": round(best_surname_score, 4),
+            },
+        )
+
+    # Given name match evaluation
+    if best_given_score >= given_name_threshold and best_given_score > best_surname_score:
+        is_recall = previously_called or is_recall_phrase
+        if venue_mode in ("cafe", "restaurant") or destination or best_given_honorific:
+            tier = "recall" if is_recall else "called"
+            instr = instruction_plain if destination else f"You were called ({best_given_reading})"
+            if is_recall and not instr.startswith("RE-CALL:"):
+                instr = f"RE-CALL: {instr}"
+        else:
+            tier = "possible"
+            instr = f"Possible call (name: {best_given_reading})"
+
+        return MatchResult(
+            tier=tier,
+            score=round(best_given_score, 4),
+            match_type="given_name",
+            matched_trigger=best_given_reading,
+            matched_surface=best_given_surface,
+            has_honorific=best_given_honorific,
+            is_recall_phrase=is_recall_phrase,
+            destination=destination,
+            instruction_plain=instr,
+            transcript_masked=mask_transcript(cleaned_tx, best_given_surface, kanji_name),
+            candidate_for_stage2=not bool(destination),
+            debug_details={
+                "full_score": round(best_full_score, 4),
+                "given_score": round(best_given_score, 4),
                 "surname_score": round(best_surname_score, 4),
             },
         )
@@ -849,14 +990,24 @@ def evaluate_transcript(
             candidate_for_stage2=True,
             debug_details={
                 "full_score": round(best_full_score, 4),
+                "given_score": round(best_given_score, 4),
                 "surname_score": round(best_surname_score, 4),
             },
         )
 
-    top_score = max(best_full_score, best_surname_score)
-    top_type = "full_name" if best_full_score >= best_surname_score else "surname"
-    top_trigger = best_full_reading if top_type == "full_name" else best_surname_reading
-    top_surface = best_full_surface if top_type == "full_name" else best_surname_surface
+    top_score = max(best_full_score, best_given_score, best_surname_score)
+    if top_score == best_full_score:
+        top_type = "full_name"
+        top_trigger = best_full_reading
+        top_surface = best_full_surface
+    elif top_score == best_given_score:
+        top_type = "given_name"
+        top_trigger = best_given_reading
+        top_surface = best_given_surface
+    else:
+        top_type = "surname"
+        top_trigger = best_surname_reading
+        top_surface = best_surname_surface
 
     return MatchResult(
         tier="none",

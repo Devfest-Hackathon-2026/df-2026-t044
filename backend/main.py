@@ -100,6 +100,10 @@ class RecognizeJsonRequest(BaseModel):
         default_factory=list,
         description="Registered katakana or English readings for the user's surname only.",
     )
+    given_name_readings: List[str] = Field(
+        default_factory=list,
+        description="Registered katakana or English readings for the user's given/first name.",
+    )
     kanji_name: Optional[str] = Field(
         default=None,
         description="User's display/kanji/English name (e.g. '東海林太郎' or 'Alex Smith').",
@@ -269,6 +273,7 @@ async def recognize(
             params.ticket_number,
             params.venue_mode,
             params.language_mode,
+            params.given_name_readings,
         )
     except Exception as exc:
         logger.error(
@@ -306,6 +311,8 @@ async def recognize(
         previously_called=was_called_recently,
         full_name_threshold=full_thresh,
         surname_threshold=surname_thresh,
+        given_name_readings=params.given_name_readings,
+        venue_mode=params.venue_mode,
     )
     matcher_ms = int((time.perf_counter() - t_match0) * 1000)
 
@@ -327,6 +334,7 @@ async def recognize(
             ticket_number=params.ticket_number,
             venue_mode=params.venue_mode,
             stage1=stage1,
+            given_name_readings=params.given_name_readings,
         )
         stage2_ms = int((time.perf_counter() - t_s2) * 1000)
         stage2_timed_out = s2_res.timed_out

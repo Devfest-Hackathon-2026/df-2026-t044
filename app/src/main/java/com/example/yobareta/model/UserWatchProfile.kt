@@ -4,8 +4,10 @@ data class UserWatchProfile(
     val kanjiName: String = "東海林 太郎",
     val selectedFullReading: String = "ショウジ タロウ",
     val selectedSurnameReading: String = "ショウジ",
+    val selectedGivenReading: String = "タロウ",
     val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shouji Tarou", "Tarou Shouji"),
     val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shouji"),
+    val alternateGivenReadings: List<String> = listOf("タロウ", "Tarou"),
     val ticketNumber: String = "",
     val venueMode: String = "auto",     // "auto" (all venues) | "hospital" | "restaurant" | "cafe"
     val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"
@@ -45,6 +47,35 @@ data class UserWatchProfile(
         list.add(normalizeReadingEntry(selectedSurnameReading))
         for (alt in alternateSurnameReadings) {
             list.add(normalizeReadingEntry(alt))
+        }
+        return list.filter { it.isNotEmpty() }.distinct()
+    }
+
+    fun allGivenNameReadings(): List<String> {
+        val list = mutableListOf<String>()
+        val hasLatin = kanjiName.any { it in 'A'..'Z' || it in 'a'..'z' }
+        val words = kanjiName.replace("　", " ").trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.size > 1) {
+            val given = if (hasLatin) words.first() else words.last()
+            list.add(normalizeReadingEntry(given))
+        }
+        if (selectedGivenReading.isNotBlank()) {
+            list.add(normalizeReadingEntry(selectedGivenReading))
+        }
+        for (alt in alternateGivenReadings) {
+            list.add(normalizeReadingEntry(alt))
+        }
+        val surNormalized = allSurnameReadings()
+        for (full in allFullNameReadings()) {
+            for (sur in surNormalized) {
+                if (full.startsWith(sur) && full.length > sur.length) {
+                    val rem = full.substring(sur.length).trim()
+                    if (rem.length >= 2) list.add(normalizeReadingEntry(rem))
+                } else if (full.endsWith(sur) && full.length > sur.length) {
+                    val rem = full.substring(0, full.length - sur.length).trim()
+                    if (rem.length >= 2) list.add(normalizeReadingEntry(rem))
+                }
+            }
         }
         return list.filter { it.isNotEmpty() }.distinct()
     }
