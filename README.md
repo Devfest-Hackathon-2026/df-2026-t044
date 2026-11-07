@@ -7,7 +7,7 @@
 
 Waiting rooms in hospitals, government offices, restaurants, and cafés can be an anxiety-inducing experience if you cannot hear PA announcements or struggle with language barriers.
 
-Yobareta listens in the background for your specific name or ticket number and instantly alerts your phone and smartwatch with an actionable, glanceable prompt:
+Yobareta listens in the background for your specific name or ticket number and instantly alerts your phone with an actionable, glanceable prompt:
 
 "You were called → Exam Room 3"
 
