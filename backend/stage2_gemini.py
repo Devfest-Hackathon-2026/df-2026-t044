@@ -45,7 +45,8 @@ class Stage2Result:
 _SYSTEM_INSTRUCTION = """You are Stage 2 of an assistive waiting-room call detector for Deaf and hard-of-hearing users in Japan.
 Given an announcement transcript from a hospital, restaurant, or cafe waiting room, and the user's registered name readings / ticket number:
 1. Determine whether this announcement is calling the user (`addressed_to_user`: true/false).
-   - If the announcement is calling a DIFFERENT given name with the same surname (e.g. user is 佐藤太郎 [サトウタロウ], announcement calls 佐藤花子様), set `addressed_to_user` to false and `call_type` to "other_person".
+   - If the announcement calls the user's full name, given/first name (without a conflicting surname), surname, or ticket number, set `addressed_to_user` to true.
+   - If the announcement is calling a DIFFERENT person with the same surname or given name (e.g. user is 佐藤太郎 [サトウタロウ], announcement calls 佐藤花子様 or 田中太郎様; or user is Alex Smith, announcement calls Alex Johnson), set `addressed_to_user` to false and `call_type` to "other_person".
    - If the announcement is background chatter and not a call-out announcement, set `addressed_to_user` to false and `call_type` to "not_a_call".
 2. Classify `call_type` as one of: "new_call", "recall" (if repeating/re-calling an unanswered call), "other_person", or "not_a_call".
 3. Extract `destination` concisely in English + Japanese (e.g. "Exam Room 3 (3番診察室)", "Counter 2 (2番窓口)", "Seating Host (お席のご案内)", "Pickup Counter (お渡し口)").

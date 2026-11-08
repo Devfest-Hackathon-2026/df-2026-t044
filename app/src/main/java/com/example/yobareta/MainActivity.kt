@@ -181,10 +181,11 @@ fun YobaretaAppScreen(
         } else {
             selectedSurnameReading.trim()
         }
+        val givenHints = KanjiReadingProposer.buildGivenNameHints(kanjiName, proposedOptions)
         val primaryGiven = if (KanjiReadingProposer.isPhoneticRespelling(selectedGivenReading)) {
-            ""
+            givenHints.firstOrNull().orEmpty()
         } else {
-            selectedGivenReading.trim()
+            selectedGivenReading.trim().ifEmpty { givenHints.firstOrNull().orEmpty() }
         }
         return UserWatchProfile(
             kanjiName = kanjiName.trim(),
@@ -193,7 +194,7 @@ fun YobaretaAppScreen(
             selectedGivenReading = primaryGiven,
             alternateFullReadings = fullHints,
             alternateSurnameReadings = surnameHints,
-            alternateGivenReadings = if (primaryGiven.isNotEmpty()) listOf(primaryGiven) else emptyList(),
+            alternateGivenReadings = givenHints,
             ticketNumber = ticketNumber.trim(),
             venueMode = "auto",
             languageMode = "auto",

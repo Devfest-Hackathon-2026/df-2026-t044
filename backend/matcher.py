@@ -869,20 +869,31 @@ def evaluate_transcript(
                 if (
                     next_word.lower() not in _ENGLISH_TITLES
                     and not any(next_word.lower() == s.lower() for s in surname_readings)
-                    and not re.match(r"^(please|proceed|come|room|counter|table|door|here|your)$", next_word, re.I)
+                    and not re.match(
+                        r"^(please|proceed|come|go|head|walk|move|step|enter|room|exam|examination|consultation|treatment|testing|counter|window|desk|reception|front|pharmacy|cashier|billing|triage|lab|table|booth|seat|seating|host|pickup|order|ticket|number|party|group|ready|waiting|here|your|is|are|to|at|in|on|for|the|a|an|san|sama|chan|kun)$",
+                        next_word,
+                        re.I,
+                    )
                 ):
                     score = 0.0
 
-        # Guard against different full name distractors in Japanese (e.g. 田中太郎 when user is 佐藤太郎)
+        # Guard against different full name distractors in Japanese (e.g. 田中太郎 or スズキタロウ when user is 佐藤太郎)
         if surface and any("぀" <= c <= "ヿ" or "一" <= c <= "鿿" for c in surface):
-            surf_no_sp = re.sub(r"[\s　]+", "", surface)
-            if surf_no_sp in tx_no_space:
-                idx = tx_no_space.find(surf_no_sp)
-                if idx >= 2:
-                    prefix_cand = tx_no_space[max(0, idx - 4) : idx]
-                    if re.search(r"[一-鿿]{2,4}$", prefix_cand):
-                        if not any(s in prefix_cand for s in surname_readings) and not (kanji_name and any(s in prefix_cand for s in kanji_name.split())):
-                            score = 0.0
+            for probe in (re.sub(r"[\s　]+", "", surface), re.sub(r"[\s　]+", "", reading)):
+                if probe and probe in tx_no_space:
+                    idx = tx_no_space.find(probe)
+                    if idx >= 2:
+                        prefix_cand = tx_no_space[max(0, idx - 5) : idx]
+                        m_pre = re.search(r"([一-鿿]{1,4}|[ァ-ヴー]{2,6})$", prefix_cand)
+                        if m_pre:
+                            pre_tok = m_pre.group(1)
+                            if (
+                                pre_tok not in ("再度", "もう一度", "受付", "番号", "番号札", "ご注文")
+                                and not any(s in pre_tok or pre_tok in s for s in surname_readings)
+                                and not (kanji_name and any(s in pre_tok for s in re.split(r"[\s　]+", kanji_name) if s))
+                            ):
+                                score = 0.0
+                                break
 
         if score > best_given_score:
             best_given_score = score
@@ -942,7 +953,7 @@ def evaluate_transcript(
     # Given name match evaluation
     if best_given_score >= given_name_threshold and best_given_score > best_surname_score:
         is_recall = previously_called or is_recall_phrase
-        if venue_mode in ("cafe", "restaurant") or destination or best_given_honorific:
+        if venue_mode in ("auto", "cafe", "restaurant") or destination or best_given_honorific:
             tier = "recall" if is_recall else "called"
             instr = instruction_plain if destination else f"You were called ({best_given_reading})"
             if is_recall and not instr.startswith("RE-CALL:"):

@@ -242,6 +242,34 @@ object KanjiReadingProposer {
             surnameHints.filter { it.isNotBlank() }.distinct()
     }
 
+    fun buildGivenNameHints(
+        nameInput: String,
+        options: List<ReadingOption>
+    ): List<String> {
+        val name = nameInput.replace("　", " ").trim()
+        val nameIsLatin = name.any { it in 'A'..'Z' || it in 'a'..'z' }
+        val givenHints = mutableListOf<String>()
+
+        val words = name.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (words.size >= 2) {
+            givenHints.add(if (nameIsLatin) words.first() else words.last())
+        }
+
+        for (option in options) {
+            if (isPhoneticRespelling(option.fullReading, option.note)) continue
+            val fClean = option.fullReading.replace("　", " ").trim()
+            val sClean = option.surnameReading.replace("　", " ").trim()
+            val gReading = fClean.replace(sClean, "").trim()
+            if (gReading.isNotEmpty()) {
+                givenHints.add(gReading)
+                if (!nameIsLatin) {
+                    katakanaToRomaji(gReading)?.let { givenHints.add(it) }
+                }
+            }
+        }
+        return givenHints.filter { it.isNotBlank() }.distinct()
+    }
+
     private val KATAKANA_DIGRAPHS: Map<String, String> = mapOf(
         "キャ" to "kya", "キュ" to "kyu", "キョ" to "kyo",
         "シャ" to "sha", "シュ" to "shu", "ショ" to "sho", "シェ" to "she",
