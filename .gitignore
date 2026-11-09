@@ -1,6 +1,7 @@
 # Android / Gradle build outputs & local properties
 *.iml
 .gradle
+.kotlin/
 /local.properties
 /.idea/caches
 /.idea/libraries

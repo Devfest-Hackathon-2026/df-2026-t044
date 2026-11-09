@@ -227,7 +227,7 @@ def test_open_ended_custom_destinations_ja_and_en():
 
 
 def test_first_name_recognition_ja_and_en():
-    # 1. English first-name call with destination
+    # 1. English first-name call with destination -> capped at 'possible' (partial match)
     res_en = evaluate_transcript(
         transcript="Alex, please proceed to Exam Room 3.",
         full_name_readings=["Alex Smith"],
@@ -235,11 +235,24 @@ def test_first_name_recognition_ja_and_en():
         kanji_name="Alex Smith",
         venue_mode="hospital",
     )
-    assert res_en.tier == "called"
+    assert res_en.tier == "possible"
     assert res_en.match_type == "given_name"
     assert res_en.destination == "Exam Room 3"
+    assert "Possible call (first name match)" in res_en.instruction_plain
 
-    # 2. English first-name call in cafe
+    # Stage 2 merge must also keep given_name capped at 'possible'
+    s2_high = Stage2Result(
+        addressed_to_user=True,
+        confidence=0.99,
+        call_type="new_call",
+        destination="Exam Room 3",
+        instruction_plain="You were called → Exam Room 3",
+    )
+    merged_given = merge_stage1_and_stage2(res_en, s2_high)
+    assert merged_given.tier == "possible"
+    assert "Possible call (first name match)" in merged_given.instruction_plain
+
+    # 2. English first-name call in cafe -> capped at 'possible'
     res_cafe = evaluate_transcript(
         transcript="Alex, your drink is ready at the pickup counter.",
         full_name_readings=["Alex Smith"],
@@ -247,11 +260,11 @@ def test_first_name_recognition_ja_and_en():
         kanji_name="Alex Smith",
         venue_mode="cafe",
     )
-    assert res_cafe.tier == "called"
+    assert res_cafe.tier == "possible"
     assert res_cafe.match_type == "given_name"
     assert res_cafe.destination == "Pickup Counter"
 
-    # 3. Japanese first-name call (太郎さん)
+    # 3. Japanese first-name call (太郎さん) -> capped at 'possible'
     res_ja = evaluate_transcript(
         transcript="太郎さん、3番診察室へお入りください。",
         full_name_readings=["ショウジタロウ"],
@@ -259,9 +272,10 @@ def test_first_name_recognition_ja_and_en():
         kanji_name="東海林 太郎",
         venue_mode="hospital",
     )
-    assert res_ja.tier == "called"
+    assert res_ja.tier == "possible"
     assert res_ja.match_type == "given_name"
     assert "3番診察室" in res_ja.destination
+    assert "Possible call (first name match)" in res_ja.instruction_plain
 
     # 4. Conflicting surname distractor (Alex Johnson when user is Alex Smith)
     res_dist_en = evaluate_transcript(

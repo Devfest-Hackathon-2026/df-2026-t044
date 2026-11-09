@@ -244,10 +244,10 @@ def merge_stage1_and_stage2(
     if stage2.used_fallback:
         return stage1
 
-    # If Gemini explicitly detected that another person with the same surname was called
+    # If Gemini explicitly detected that another person with the same surname/first name was called
     # (e.g. "佐藤花子様" when the user is "佐藤太郎"), suppress false alarm!
     if not stage2.addressed_to_user or stage2.call_type in ("other_person", "not_a_call"):
-        if stage1.match_type == "surname" or stage1.score < 0.95:
+        if stage1.match_type in ("surname", "given_name") or stage1.score < 0.95:
             return MatchResult(
                 tier="none",
                 score=round(min(stage1.score, 0.5), 4),
@@ -266,16 +266,19 @@ def merge_stage1_and_stage2(
     destination = stage2.destination or stage1.destination
     instruction_plain = stage2.instruction_plain or stage1.instruction_plain
 
-    # Invariant: Surname-only NEVER fires a full alert!
-    if stage1.match_type == "surname":
-        if destination and "Possible" not in instruction_plain:
-            instruction_plain = f"Possible call (surname match) → {destination}"
-        elif not instruction_plain:
-            instruction_plain = "Possible call (surname matched)"
+    # Invariant: Partial name matches (surname-only or first-name-only) NEVER fire a full alert!
+    if stage1.match_type in ("surname", "given_name"):
+        label = "first name" if stage1.match_type == "given_name" else "surname"
+        if "Possible" not in instruction_plain:
+            instruction_plain = (
+                f"Possible call ({label} match) → {destination}"
+                if destination
+                else f"Possible call ({label} matched)"
+            )
         return MatchResult(
             tier="possible",
             score=round(max(stage1.score, stage2.confidence * 0.9), 4),
-            match_type="surname",
+            match_type=stage1.match_type,
             matched_trigger=stage1.matched_trigger,
             matched_surface=stage1.matched_surface,
             has_honorific=stage1.has_honorific,

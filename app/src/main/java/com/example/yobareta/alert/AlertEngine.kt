@@ -85,7 +85,7 @@ class AlertEngine(private val context: Context) {
                 )
                 postWatchMirroredNotification(
                     title = "Possible Call (${result.matchedTrigger})",
-                    body = result.instructionPlain.ifEmpty { "Surname matched — listen/check board" },
+                    body = result.instructionPlain.ifEmpty { "Partial name matched — listen/check board" },
                     isFullCall = false
                 )
             }

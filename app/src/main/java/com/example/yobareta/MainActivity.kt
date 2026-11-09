@@ -717,14 +717,19 @@ fun PossibleSurnameBanner(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val matchLabel = when {
+                alert.instructionPlain.contains("first name", ignoreCase = true) -> "FIRST NAME MATCH"
+                alert.instructionPlain.contains("surname", ignoreCase = true) -> "SURNAME MATCH"
+                else -> "PARTIAL MATCH"
+            }
             Text(
-                text = "🔔 POSSIBLE CALL — SURNAME MATCH (${alert.matchedTrigger})",
+                text = "🔔 POSSIBLE CALL — $matchLabel (${alert.matchedTrigger})",
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
                 style = MaterialTheme.typography.labelLarge
             )
             Text(
-                text = alert.instructionPlain.ifEmpty { "Surname matched — check if this call is for you" },
+                text = alert.instructionPlain.ifEmpty { "Partial name matched — check if this call is for you" },
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp

@@ -950,20 +950,15 @@ def evaluate_transcript(
             },
         )
 
-    # Given name match evaluation
+    # Given name match evaluation (First-name-only is capped at 'possible', same as surname-only)
     if best_given_score >= given_name_threshold and best_given_score > best_surname_score:
-        is_recall = previously_called or is_recall_phrase
-        if venue_mode in ("auto", "cafe", "restaurant") or destination or best_given_honorific:
-            tier = "recall" if is_recall else "called"
-            instr = instruction_plain if destination else f"You were called ({best_given_reading})"
-            if is_recall and not instr.startswith("RE-CALL:"):
-                instr = f"RE-CALL: {instr}"
-        else:
-            tier = "possible"
-            instr = f"Possible call (name: {best_given_reading})"
-
+        possible_instr = (
+            f"Possible call (first name match) → {destination}"
+            if destination
+            else "Possible call (first name matched)"
+        )
         return MatchResult(
-            tier=tier,
+            tier="possible",
             score=round(best_given_score, 4),
             match_type="given_name",
             matched_trigger=best_given_reading,
@@ -971,9 +966,9 @@ def evaluate_transcript(
             has_honorific=best_given_honorific,
             is_recall_phrase=is_recall_phrase,
             destination=destination,
-            instruction_plain=instr,
+            instruction_plain=possible_instr,
             transcript_masked=mask_transcript(cleaned_tx, best_given_surface, kanji_name),
-            candidate_for_stage2=not bool(destination),
+            candidate_for_stage2=True,
             debug_details={
                 "full_score": round(best_full_score, 4),
                 "given_score": round(best_given_score, 4),
