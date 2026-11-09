@@ -56,6 +56,8 @@ data class ListenServiceUiState(
     val usingYamnetModel: Boolean = false,
     val percentAudioSent: Float = 0f,
     val segmentsUploadedCount: Int = 0,
+    val uploadedSeconds: Float = 0f,
+    val listenedSeconds: Float = 0f,
     val latestAlert: RecognizeAlertResult? = null,
     val hasReplayable10sClip: Boolean = false,
     val isReplayingAudio: Boolean = false,
@@ -117,6 +119,10 @@ class ListenService : Service() {
     private var isUploadInFlight = false
     @Volatile
     private var lastUploadCompletedMs = 0L
+    @Volatile
+    private var sessionCapturedSamples = 0L
+    @Volatile
+    private var sessionUploadedSamples = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -159,7 +165,18 @@ class ListenService : Service() {
         if (captureJob?.isActive == true) return
 
         previouslyCalledInSession = false
+        sessionCapturedSamples = 0L
+        sessionUploadedSamples = 0L
+        audioGate.resetSessionCounters()
         ringBuffer.clear()
+        _uiState.update {
+            it.copy(
+                percentAudioSent = 0f,
+                segmentsUploadedCount = 0,
+                uploadedSeconds = 0f,
+                listenedSeconds = 0f
+            )
+        }
 
         // 1. Ping /warm asynchronously when user taps Start to prevent Cloud Run cold starts
         serviceScope.launch {
@@ -207,6 +224,7 @@ class ListenService : Service() {
                 while (isActive) {
                     val readCount = audioRecord.read(chunkBuffer, 0, CHUNK_SAMPLES)
                     if (readCount > 0) {
+                        sessionCapturedSamples += readCount.toLong()
                         // Store in 15 s RAM ring buffer (never written to disk)
                         ringBuffer.append(chunkBuffer, readCount)
 
@@ -220,6 +238,16 @@ class ListenService : Service() {
                             }
                         )
 
+                        val capSec = sessionCapturedSamples.toFloat() / SAMPLE_RATE_HZ.toFloat()
+                        val upSec = sessionUploadedSamples.toFloat() / SAMPLE_RATE_HZ.toFloat()
+                        val pct = if (sessionCapturedSamples > 0L) {
+                            ((sessionUploadedSamples.toDouble() / sessionCapturedSamples.toDouble()) * 100.0)
+                                .toFloat()
+                                .coerceIn(0f, 100f)
+                        } else {
+                            0f
+                        }
+
                         _uiState.update { state ->
                             state.copy(
                                 currentDbFs = metrics.currentDbFs,
@@ -228,7 +256,9 @@ class ListenService : Service() {
                                 chimeProbability = metrics.chimeProbability,
                                 isCapturingSegment = metrics.isCapturingSegment,
                                 usingYamnetModel = metrics.usingYamnetModel,
-                                percentAudioSent = metrics.percentAudioSent
+                                percentAudioSent = pct,
+                                uploadedSeconds = upSec,
+                                listenedSeconds = capSec
                             )
                         }
                     }
@@ -263,12 +293,28 @@ class ListenService : Service() {
             return
         }
         isUploadInFlight = true
+        sessionUploadedSamples += segmentShorts.size.toLong()
+        audioGate.recordUploadedSamples(segmentShorts.size)
         val pcmBytes = AudioRingBuffer.shortsToPcm16LeBytes(segmentShorts)
         val profileSnapshot = activeProfile
 
         serviceScope.launch(Dispatchers.IO) {
+            val capSec = sessionCapturedSamples.toFloat() / SAMPLE_RATE_HZ.toFloat()
+            val upSec = sessionUploadedSamples.toFloat() / SAMPLE_RATE_HZ.toFloat()
+            val pct = if (sessionCapturedSamples > 0L) {
+                ((sessionUploadedSamples.toDouble() / sessionCapturedSamples.toDouble()) * 100.0)
+                    .toFloat()
+                    .coerceIn(0f, 100f)
+            } else {
+                0f
+            }
             _uiState.update {
-                it.copy(segmentsUploadedCount = it.segmentsUploadedCount + 1)
+                it.copy(
+                    segmentsUploadedCount = it.segmentsUploadedCount + 1,
+                    uploadedSeconds = upSec,
+                    listenedSeconds = capSec,
+                    percentAudioSent = pct
+                )
             }
             try {
                 val result = cloudClient.recognizeSegment(

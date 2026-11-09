@@ -574,9 +574,11 @@ fun YobaretaAppScreen(
                         Text(
                             text = String.format(
                                 Locale.US,
-                                "Audio Sent to Cloud: %.1f%% (%d clips) • %s",
-                                serviceState.percentAudioSent,
+                                "Cloud Uploads: %d %s (%.1fs sent / %.1fs listened) • %s",
                                 serviceState.segmentsUploadedCount,
+                                if (serviceState.segmentsUploadedCount == 1) "clip" else "clips",
+                                serviceState.uploadedSeconds,
+                                serviceState.listenedSeconds,
                                 serviceState.warmStatus
                             ),
                             style = MaterialTheme.typography.bodySmall
@@ -698,11 +700,11 @@ fun ListeningHeroCard(
                             color = Color.White.copy(alpha = 0.9f)
                         )
                         Text(
-                            text = String.format(
-                                Locale.US,
-                                "Only %.1f%% audio sent",
-                                serviceState.percentAudioSent
-                            ),
+                            text = when (val count = serviceState.segmentsUploadedCount) {
+                                0 -> "0 clips sent (100% in RAM)"
+                                1 -> "1 speech clip sent"
+                                else -> " speech clips sent"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFA7F3D0),
                             fontWeight = FontWeight.SemiBold

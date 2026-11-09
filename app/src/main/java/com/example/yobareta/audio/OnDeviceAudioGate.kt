@@ -186,7 +186,6 @@ class OnDeviceAudioGate(
 
                 if (finalLen >= minSegmentSamples && activeVoicedSamplesInSegment >= minActiveVoicedSamplesRequired) {
                     val cutSegment = segmentBuffer.copyOfRange(0, finalLen)
-                    totalUploadedSamples += finalLen
                     resetCaptureState()
                     onSegmentCut(cutSegment)
                 } else {
@@ -211,6 +210,18 @@ class OnDeviceAudioGate(
             usingYamnetModel = (yamnetClassifier != null),
             percentAudioSent = pctSent.coerceIn(0f, 100f)
         )
+    }
+
+    fun resetSessionCounters() {
+        totalProcessedSamples = 0L
+        totalUploadedSamples = 0L
+        resetCaptureState()
+    }
+
+    fun recordUploadedSamples(sampleCount: Int) {
+        if (sampleCount > 0) {
+            totalUploadedSamples += sampleCount.toLong()
+        }
     }
 
     private fun resetCaptureState() {
