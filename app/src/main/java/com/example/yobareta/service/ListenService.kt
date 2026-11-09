@@ -293,8 +293,12 @@ class ListenService : Service() {
             return
         }
         isUploadInFlight = true
-        sessionUploadedSamples += segmentShorts.size.toLong()
-        audioGate.recordUploadedSamples(segmentShorts.size)
+        // Subtract the 1.0s pre-roll overlap when computing new audio sent vs total captured time
+        val preRollSamples = SAMPLE_RATE_HZ
+        val netNewSamples = (segmentShorts.size - preRollSamples).coerceAtLeast(SAMPLE_RATE_HZ)
+        val maxAllowedUploaded = (sessionCapturedSamples - (SAMPLE_RATE_HZ / 2)).coerceAtLeast(0L)
+        sessionUploadedSamples = (sessionUploadedSamples + netNewSamples.toLong()).coerceAtMost(maxAllowedUploaded)
+        audioGate.recordUploadedSamples(netNewSamples)
         val pcmBytes = AudioRingBuffer.shortsToPcm16LeBytes(segmentShorts)
         val profileSnapshot = activeProfile
 

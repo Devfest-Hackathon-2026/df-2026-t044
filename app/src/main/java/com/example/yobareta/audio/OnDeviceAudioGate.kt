@@ -72,9 +72,12 @@ class OnDeviceAudioGate(
     private val rollingClassifierBuffer = ShortArray(YAMNET_WINDOW_SAMPLES)
     private var rollingFilled = 0
 
-    // Adaptive ambient noise floor in dBFS (initialized to typical quiet room -48 dBFS)
-    private var ambientBaselineDb: Float = -48.0f
+    // Adaptive ambient noise floor in dBFS (initialized to typical quiet room -46 dBFS)
+    private var ambientBaselineDb: Float = -46.0f
     private var baselineInitialized = false
+    private var warmupChunksRemaining = 4
+    private var warmupDbSum = 0f
+    private var warmupDbCount = 0
 
     // Segment accumulation state
     private var isCapturing = false
@@ -133,20 +136,41 @@ class OnDeviceAudioGate(
         updateRollingClassifierWindow(chunk, count)
 
         val rmsDb = computeRmsDbFs(chunk, count)
+        if (warmupChunksRemaining > 0) {
+            warmupChunksRemaining--
+            if (rmsDb > -75f) {
+                warmupDbSum += rmsDb
+                warmupDbCount++
+            }
+            if (warmupChunksRemaining == 0) {
+                val avgDb = if (warmupDbCount > 0) (warmupDbSum / warmupDbCount) else -46f
+                ambientBaselineDb = avgDb.coerceIn(-52f, -30f)
+                baselineInitialized = true
+            }
+            return GateMetrics(
+                currentDbFs = rmsDb,
+                ambientBaselineDbFs = ambientBaselineDb,
+                speechProbability = 0f,
+                chimeProbability = 0f,
+                isCapturingSegment = false,
+                usingYamnetModel = (yamnetClassifier != null),
+                percentAudioSent = 0f
+            )
+        }
         if (!baselineInitialized) {
-            ambientBaselineDb = rmsDb.coerceIn(-65f, -32f)
+            ambientBaselineDb = rmsDb.coerceIn(-52f, -30f)
             baselineInitialized = true
         }
 
         val (speechProb, chimeProb) = evaluateSpeechAndChimeProbabilities(chunk, count, rmsDb)
         val combinedProb = max(speechProb, chimeProb)
-        val isAboveLoudnessGate = rmsDb >= (ambientBaselineDb + triggerDbMarginAboveAmbient) && rmsDb > -52f
+        val isAboveLoudnessGate = rmsDb >= (ambientBaselineDb + triggerDbMarginAboveAmbient) && rmsDb > -48f
         val isFrameActive = isAboveLoudnessGate && (speechProb >= 0.25f || chimeProb >= 0.22f)
 
-        // Update ambient baseline slowly only when NOT capturing and frame is quiet/non-speech
-        if (!isCapturing && !isFrameActive) {
-            val alpha = if (rmsDb < ambientBaselineDb) 0.08f else 0.02f
-            ambientBaselineDb = ((1f - alpha) * ambientBaselineDb + alpha * rmsDb).coerceIn(-68f, -28f)
+        // Update ambient baseline when NOT capturing (or very slowly upward if ambient room level rose)
+        if (!isCapturing) {
+            val alpha = if (rmsDb < ambientBaselineDb) 0.08f else 0.04f
+            ambientBaselineDb = ((1f - alpha) * ambientBaselineDb + alpha * rmsDb).coerceIn(-54f, -26f)
         }
 
         if (!isCapturing) {
@@ -180,6 +204,10 @@ class OnDeviceAudioGate(
             val hitTrailingSilence = silenceSamplesSinceLastActive >= trailingSilenceLimitSamples
 
             if (hitMaxDuration || hitTrailingSilence) {
+                if (hitMaxDuration && !hitTrailingSilence) {
+                    // Room noise floor likely shifted higher; nudge baseline upward so gate doesn't re-trigger on steady noise
+                    ambientBaselineDb = ((0.7f * ambientBaselineDb) + (0.3f * rmsDb)).coerceIn(-54f, -26f)
+                }
                 // Trim excess trailing silence (keep ~0.25s tail for natural word endings)
                 val trimSamples = max(0, silenceSamplesSinceLastActive - (sampleRateHz / 4))
                 val finalLen = (segmentLength - trimSamples).coerceAtLeast(0)
@@ -215,6 +243,10 @@ class OnDeviceAudioGate(
     fun resetSessionCounters() {
         totalProcessedSamples = 0L
         totalUploadedSamples = 0L
+        warmupChunksRemaining = 4
+        warmupDbSum = 0f
+        warmupDbCount = 0
+        baselineInitialized = false
         resetCaptureState()
     }
 
