@@ -228,6 +228,66 @@ class Stage2GeminiVerifier:
             )
 
 
+
+    def _propose_readings_sync(self, name_input: str) -> list[dict[str, str]]:
+        client = self.get_client()
+        if client is None or genai_types is None:
+            return []
+        has_latin = any("A" <= ch <= "Z" or "a" <= ch <= "z" for ch in name_input)
+        if has_latin:
+            prompt = (
+                f'For the personal name "{name_input}", propose:\n'
+                '1. Its English phonetic pronunciation respelling (syllables separated by hyphens, e.g. "AH-leks SMITH").\n'
+                '2. Its Japanese Katakana pronunciation as spoken over a Japanese PA system (e.g. "アレックス スミス").\n'
+                'Return JSON: {"readings": ['
+                '{"full_reading": "AH-leks SMITH", "surname_reading": "SMITH", "note": "Phonetic"}, '
+                '{"full_reading": "アレックス スミス", "surname_reading": "スミス", "note": "Japanese PA"}'
+                ']}'
+            )
+        else:
+            prompt = (
+                f'Propose all common Japanese Katakana readings (with a space between surname and given name) '
+                f'and an English phonetic respelling for the Japanese personal name "{name_input}". '
+                'Include multiple readings if the surname or given name has ambiguous readings '
+                '(e.g. 東海林 -> ショウジ and トウカイリン, 山崎 -> ヤマザキ and ヤマサキ).\n'
+                'Return JSON: {"readings": ['
+                '{"full_reading": "ショウジ タロウ", "surname_reading": "ショウジ", "note": "一般的"}, '
+                '{"full_reading": "トウカイリン タロウ", "surname_reading": "トウカイリン", "note": "別読み"}, '
+                '{"full_reading": "SHOH-jee TAH-roh", "surname_reading": "SHOH-jee", "note": "Phonetic"}'
+                ']}'
+            )
+        config = genai_types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=256,
+            response_mime_type="application/json",
+        )
+        response = client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=config,
+        )
+        parsed = json.loads(response.text or "{}")
+        items = parsed.get("readings") or []
+        out: list[dict[str, str]] = []
+        for item in items:
+            if isinstance(item, dict):
+                f_r = str(item.get("full_reading") or "").strip()
+                s_r = str(item.get("surname_reading") or "").strip()
+                note = str(item.get("note") or "").strip()
+                if f_r and s_r:
+                    out.append({"full_reading": f_r, "surname_reading": s_r, "note": note})
+        return out
+
+    async def propose_readings(self, name_input: str) -> list[dict[str, str]]:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._propose_readings_sync, name_input),
+                timeout=2.2,
+            )
+        except Exception:
+            return []
+
+
 def merge_stage1_and_stage2(
     stage1: MatchResult,
     stage2: Stage2Result,

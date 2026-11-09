@@ -202,20 +202,22 @@ fun YobaretaAppScreen(
         )
     }
 
-    // Automatically enrich readings via Gemini after a brief typing pause
-    LaunchedEffect(kanjiName) {
+    // Automatically enrich readings via Cloud Run (SudachiPy + Gemini) after a brief typing pause
+    LaunchedEffect(kanjiName, cloudRunUrl) {
         val trimmed = kanjiName.trim()
         if (trimmed.isEmpty()) {
             proposedOptions = emptyList()
             selectedFullReading = ""
             selectedSurnameReading = ""
+            selectedGivenReading = ""
             return@LaunchedEffect
         }
-        kotlinx.coroutines.delay(450L)
-        val enriched = KanjiReadingProposer.proposeReadings(trimmed)
+        kotlinx.coroutines.delay(350L)
+        val enriched = KanjiReadingProposer.proposeReadings(trimmed, cloudRunUrl)
         if (enriched.isNotEmpty()) {
             proposedOptions = enriched
-            if (enriched.none { it.fullReading == selectedFullReading }) {
+            val currentHasUnconvertedKanji = selectedFullReading.any { it in '\u4E00'..'\u9FFF' }
+            if (currentHasUnconvertedKanji || enriched.none { it.fullReading == selectedFullReading }) {
                 selectedFullReading = enriched.first().fullReading
                 selectedSurnameReading = enriched.first().surnameReading
                 val fClean = enriched.first().fullReading.replace("　", " ").trim()

@@ -376,3 +376,63 @@ async def recognize(
         instruction_plain=final_result.instruction_plain,
         latency_ms=total_latency_ms,
     )
+
+
+class ProposeReadingsRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+
+
+@app.post("/propose-readings")
+async def propose_readings_endpoint(
+    payload: ProposeReadingsRequest,
+    uid_hash: str = Depends(verify_request_tokens),
+) -> Dict[str, object]:
+    """Proposes Katakana and phonetic readings for a Kanji or English name using SudachiPy + Gemini."""
+    cleaned = payload.name.replace("　", " ").strip()
+    if not cleaned:
+        return {"readings": []}
+
+    extractor = get_reading_extractor()
+    sudachi_options: List[Dict[str, str]] = []
+
+    has_latin = any("A" <= ch <= "Z" or "a" <= ch <= "z" for ch in cleaned)
+    if not has_latin:
+        parts = [p for p in cleaned.split() if p]
+        if len(parts) >= 2:
+            sur_tokens = extractor.tokenize_with_readings(parts[0])
+            giv_tokens = extractor.tokenize_with_readings("".join(parts[1:]))
+            sur_kata = "".join(r for _, r in sur_tokens).strip()
+            giv_kata = "".join(r for _, r in giv_tokens).strip()
+        else:
+            tokens = extractor.tokenize_with_readings(cleaned)
+            if len(tokens) >= 2:
+                sur_kata = tokens[0][1].strip()
+                giv_kata = "".join(r for _, r in tokens[1:]).strip()
+            elif len(tokens) == 1:
+                sur_kata = tokens[0][1].strip()
+                giv_kata = ""
+            else:
+                sur_kata = ""
+                giv_kata = ""
+        if sur_kata:
+            full_kata = f"{sur_kata} {giv_kata}".strip()
+            sudachi_options.append(
+                {
+                    "full_reading": full_kata,
+                    "surname_reading": sur_kata,
+                    "note": "標準",
+                }
+            )
+
+    verifier = get_stage2_verifier()
+    gemini_options = await verifier.propose_readings(cleaned)
+
+    combined: List[Dict[str, str]] = []
+    seen = set()
+    for opt in gemini_options + sudachi_options:
+        key = opt["full_reading"].replace(" ", "").lower()
+        if key and key not in seen:
+            seen.add(key)
+            combined.append(opt)
+
+    return {"readings": combined}
