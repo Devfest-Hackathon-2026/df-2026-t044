@@ -32,10 +32,10 @@ data class GateMetrics(
 class OnDeviceAudioGate(
     context: Context,
     private val sampleRateHz: Int = 16000,
-    private val preRollSeconds: Float = 1.0f,
-    private val minSegmentSeconds: Float = 2.0f,
-    private val maxSegmentSeconds: Float = 8.0f,
-    private val trailingSilenceToCutSeconds: Float = 0.75f,
+    private val preRollSeconds: Float = 0.7f,
+    private val minSegmentSeconds: Float = 1.8f,
+    private val maxSegmentSeconds: Float = 5.5f,
+    private val trailingSilenceToCutSeconds: Float = 0.55f,
     private val triggerDbMarginAboveAmbient: Float = 7.5f
 ) {
     companion object {

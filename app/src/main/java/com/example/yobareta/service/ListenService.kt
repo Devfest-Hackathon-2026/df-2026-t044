@@ -293,8 +293,8 @@ class ListenService : Service() {
             return
         }
         isUploadInFlight = true
-        // Subtract the 1.0s pre-roll overlap when computing new audio sent vs total captured time
-        val preRollSamples = SAMPLE_RATE_HZ
+        // Subtract the 0.7s pre-roll overlap when computing new audio sent vs total captured time
+        val preRollSamples = (SAMPLE_RATE_HZ * 0.7f).toInt()
         val netNewSamples = (segmentShorts.size - preRollSamples).coerceAtLeast(SAMPLE_RATE_HZ)
         val maxAllowedUploaded = (sessionCapturedSamples - (SAMPLE_RATE_HZ / 2)).coerceAtLeast(0L)
         sessionUploadedSamples = (sessionUploadedSamples + netNewSamples.toLong()).coerceAtMost(maxAllowedUploaded)
