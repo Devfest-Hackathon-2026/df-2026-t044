@@ -571,14 +571,16 @@ fun YobaretaAppScreen(
                             ),
                             style = MaterialTheme.typography.bodySmall
                         )
+                        val pctFiltered = (100f - serviceState.percentAudioSent).coerceIn(0f, 100f)
                         Text(
                             text = String.format(
                                 Locale.US,
-                                "Cloud Uploads: %d %s (%.1fs sent / %.1fs listened) • %s",
+                                "Cloud Uploads: %d %s (%.1fs / %.1fs • %.1f%% filtered) • %s",
                                 serviceState.segmentsUploadedCount,
                                 if (serviceState.segmentsUploadedCount == 1) "clip" else "clips",
                                 serviceState.uploadedSeconds,
                                 serviceState.listenedSeconds,
+                                pctFiltered,
                                 serviceState.warmStatus
                             ),
                             style = MaterialTheme.typography.bodySmall
@@ -699,11 +701,14 @@ fun ListeningHeroCard(
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.9f)
                         )
+                        val pctFiltered = (100f - serviceState.percentAudioSent).coerceIn(0f, 100f)
+                        val count = serviceState.segmentsUploadedCount
+                        val clipLabel = if (count == 1) "1 clip sent" else "$count clips sent"
                         Text(
-                            text = when (val count = serviceState.segmentsUploadedCount) {
-                                0 -> "0 clips sent (100% in RAM)"
-                                1 -> "1 speech clip sent"
-                                else -> " speech clips sent"
+                            text = when {
+                                count == 0 -> "0 clips sent (100% filtered in RAM)"
+                                pctFiltered >= 50f -> String.format(Locale.US, "%s (%.0f%% filtered in RAM)", clipLabel, pctFiltered)
+                                else -> String.format(Locale.US, "%s (%.1fs)", clipLabel, serviceState.uploadedSeconds)
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFA7F3D0),
