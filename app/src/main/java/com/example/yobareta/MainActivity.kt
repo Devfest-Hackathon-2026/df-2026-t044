@@ -3,8 +3,12 @@ package com.example.yobareta
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,11 +55,20 @@ class MainActivity : ComponentActivity() {
 
     private val authManager by lazy { AuthManager() }
 
+    private var permissionRequestedOnce = false
+
     private val requestPermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        micPermissionGranted.value = results[Manifest.permission.RECORD_AUDIO] == true ||
+        val granted = results[Manifest.permission.RECORD_AUDIO] == true ||
             isAudioPermissionGranted()
+        micPermissionGranted.value = granted
+        if (!granted && permissionRequestedOnce &&
+            !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+        ) {
+            openAppPermissionSettings()
+        }
+        permissionRequestedOnce = true
     }
 
     private val micPermissionGranted = mutableStateOf(false)
@@ -63,6 +76,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         AppConfig.initFromContext(applicationContext)
         AuthManager.initAppCheck(applicationContext)
@@ -132,6 +149,24 @@ class MainActivity : ComponentActivity() {
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         requestPermissionsLauncher.launch(perms.toTypedArray())
+    }
+
+    private fun openAppPermissionSettings() {
+        Toast.makeText(
+            this,
+            "Microphone access was denied. Please enable Microphone in App Permissions.",
+            Toast.LENGTH_LONG
+        ).show()
+        try {
+            val intent = Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", packageName, null)
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {
+        }
     }
 }
 
@@ -687,11 +722,15 @@ fun ListeningHeroCard(
                     Text("Grant Microphone & Notification Permissions", fontWeight = FontWeight.Bold)
                 }
             } else {
+                val hasTargetToWatch = kanjiName.isNotBlank() || ticketNumber.isNotBlank()
                 Button(
                     onClick = if (serviceState.isListening) onStopListening else onStartListening,
+                    enabled = serviceState.isListening || hasTargetToWatch,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (serviceState.isListening) Color(0xFFD32F2F) else Color(0xFF1565C0),
-                        contentColor = Color.White
+                        contentColor = Color.White,
+                        disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     ),
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -699,7 +738,11 @@ fun ListeningHeroCard(
                         .height(54.dp)
                 ) {
                     Text(
-                        text = if (serviceState.isListening) "■ Stop Listening" else "▶ Start Listening",
+                        text = when {
+                            serviceState.isListening -> "■ Stop Listening"
+                            hasTargetToWatch -> "▶ Start Listening"
+                            else -> "Enter Name or Ticket # Below to Start"
+                        },
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
