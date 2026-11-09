@@ -1,13 +1,13 @@
 package com.example.yobareta.model
 
 data class UserWatchProfile(
-    val kanjiName: String = "東海林 太郎",
-    val selectedFullReading: String = "ショウジ タロウ",
-    val selectedSurnameReading: String = "ショウジ",
-    val selectedGivenReading: String = "タロウ",
-    val alternateFullReadings: List<String> = listOf("ショウジタロウ", "トウカイリンタロウ", "Shouji Tarou", "Tarou Shouji"),
-    val alternateSurnameReadings: List<String> = listOf("ショウジ", "トウカイリン", "Shouji"),
-    val alternateGivenReadings: List<String> = listOf("タロウ", "Tarou"),
+    val kanjiName: String = "",
+    val selectedFullReading: String = "",
+    val selectedSurnameReading: String = "",
+    val selectedGivenReading: String = "",
+    val alternateFullReadings: List<String> = emptyList(),
+    val alternateSurnameReadings: List<String> = emptyList(),
+    val alternateGivenReadings: List<String> = emptyList(),
     val ticketNumber: String = "",
     val venueMode: String = "auto",     // "auto" (all venues) | "hospital" | "restaurant" | "cafe"
     val languageMode: String = "auto",  // "auto" (JA+EN) | "ja-JP" | "en-US"

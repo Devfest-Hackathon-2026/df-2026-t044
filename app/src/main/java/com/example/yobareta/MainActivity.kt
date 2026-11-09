@@ -149,22 +149,14 @@ fun YobaretaAppScreen(
 ) {
     val scrollState = rememberScrollState()
 
-    var kanjiName by remember { mutableStateOf("東海林 太郎") }
-    var selectedFullReading by remember { mutableStateOf("ショウジ タロウ") }
-    var selectedSurnameReading by remember { mutableStateOf("ショウジ") }
-    var selectedGivenReading by remember { mutableStateOf("タロウ") }
-    var proposedOptions by remember {
-        mutableStateOf(
-            listOf(
-                ReadingOption("ショウジ タロウ", "ショウジ", "一般的"),
-                ReadingOption("トウカイリン タロウ", "トウカイリン", "別読み"),
-                ReadingOption("SHOH-jee TAH-roh", "SHOH-jee", "Phonetic")
-            )
-        )
-    }
+    var kanjiName by remember { mutableStateOf("") }
+    var selectedFullReading by remember { mutableStateOf("") }
+    var selectedSurnameReading by remember { mutableStateOf("") }
+    var selectedGivenReading by remember { mutableStateOf("") }
+    var proposedOptions by remember { mutableStateOf(emptyList<ReadingOption>()) }
     var showManualReadingEdit by remember { mutableStateOf(false) }
 
-    var ticketNumber by remember { mutableStateOf("305") }
+    var ticketNumber by remember { mutableStateOf("") }
     var cloudRunUrl by remember { mutableStateOf(AppConfig.DEFAULT_CLOUD_RUN_BASE_URL) }
     var showJudgeDrawer by remember { mutableStateOf(false) }
 
@@ -425,7 +417,11 @@ fun YobaretaAppScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Active: $selectedFullReading (Surname: $selectedSurnameReading, First: $selectedGivenReading)",
+                        text = if (selectedFullReading.isNotBlank()) {
+                            "Active: $selectedFullReading (Surname: $selectedSurnameReading, First: $selectedGivenReading)"
+                        } else {
+                            "Type your name above to see pronunciation suggestions"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
