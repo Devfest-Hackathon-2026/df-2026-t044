@@ -326,16 +326,24 @@ class ListenService : Service() {
                     if (result.tier == "called" || result.tier == "recall") {
                         previouslyCalledInSession = true
                     }
-                    // Snapshot last 10 seconds in RAM for the 10 s replay button
-                    last10sReplaySnapshot = ringBuffer.readLastSeconds(10.0f)
-                    _uiState.update {
-                        it.copy(
-                            latestAlert = result,
-                            hasReplayable10sClip = last10sReplaySnapshot.isNotEmpty(),
-                            lastError = null
-                        )
+                    val activeTier = _uiState.value.latestAlert?.tier
+                    val isDowngradeFromFullCall =
+                        (activeTier == "called" || activeTier == "recall") && result.tier == "possible"
+
+                    if (!isDowngradeFromFullCall) {
+                        // Snapshot last 10 seconds in RAM for the 10 s replay button
+                        last10sReplaySnapshot = ringBuffer.readLastSeconds(10.0f)
+                        _uiState.update {
+                            it.copy(
+                                latestAlert = result,
+                                hasReplayable10sClip = last10sReplaySnapshot.isNotEmpty(),
+                                lastError = null
+                            )
+                        }
+                        alertEngine.triggerAlert(result)
+                    } else {
+                        _uiState.update { it.copy(lastError = null) }
                     }
-                    alertEngine.triggerAlert(result)
                 } else {
                     _uiState.update { it.copy(lastError = null) }
                 }
