@@ -423,17 +423,28 @@ fun YobaretaAppScreen(
                             "Type your name above to see pronunciation suggestions"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = if (showManualReadingEdit) "Done" else "Edit",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
-                            .clickable { showManualReadingEdit = !showManualReadingEdit }
-                            .padding(4.dp)
+                            .weight(1f)
+                            .padding(end = 12.dp)
                     )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (showManualReadingEdit) Color(0xFF00695C) else MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showManualReadingEdit = !showManualReadingEdit }
+                    ) {
+                        Text(
+                            text = if (showManualReadingEdit) "Done" else "Edit",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (showManualReadingEdit) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    }
                 }
 
                 AnimatedVisibility(visible = showManualReadingEdit) {
