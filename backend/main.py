@@ -161,6 +161,22 @@ def _record_call_event(recall_key: str) -> None:
     _RECENT_CALL_TIMESTAMPS[recall_key] = time.monotonic()
 
 
+@app.get("/")
+async def root() -> Dict[str, object]:
+    return {
+        "service": "Yobareta (呼ばれた) Cloud Run API",
+        "status": "ok",
+        "region": "asia-northeast1",
+        "endpoints": {
+            "healthz": "/healthz",
+            "warm": "/warm",
+            "recognize": "POST /recognize",
+            "propose_readings": "POST /propose-readings",
+        },
+        "repository": "https://github.com/Devfest-Hackathon-2026/df-2026-t044",
+    }
+
+
 @app.get("/healthz")
 async def healthz() -> Dict[str, str]:
     return {"status": "ok"}
