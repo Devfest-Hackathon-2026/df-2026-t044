@@ -1,0 +1,27 @@
+id,run,yob_tier,yob_destination_correct,yob_latency_s,lt_buzzed,notes
+A01,1,called,yes,1.565,yes,
+A02,1,called,yes,2.459,yes,
+A03,1,called,yes,2.21,yes,
+A04,1,possible,yes,2.328,no,"The live transcribe doesn’t buzz if only first or surname is being called, but our app guves a partial match"
+A05,1,recall,yes,2.457,yes,
+A06,1,called,yes,2.481,yes,
+A07,1,called,,1.636,yes,
+A08,1,possible,,2.417,yes,
+A09,1,none,,,no,
+A10,1,called,yes,1.973,no,"If the input name is Japanese, live transcribe doesn't buzz for English pronunciation but our app does "
+B01,1,called,yes,2.243,yes,
+B02,1,possible,yes,2.269,no,"The live transcribe doesn’t buzz if only first or surname is being called, but our app guves a partial match"
+B03,1,recall,yes,2.265,yes,
+B04,1,called,no,1.965,no,"If the input name is English, live transcribe doesn't buzz for japanese pronunciation but our app does "
+B05,1,none,,,no,
+B06,1,called,yes,2.074,no,"For order A12, the transcribe app read it as ""a 12"" so it doesn’t  buzz always"
+B07,1,none,,,no,
+C01,1,possible,,1.935,no,
+C02,1,possible,yes,2.446,no,"The live transcribe doesn’t buzz if only first or surname is being called, but our app guves a partial match"
+C03,1,called,yes,2.431,no,"If we input space between japanese surname and first name, live transcribe doesn’t buzz but our app does "
+R01,1,possible,,2.163,no,"The live transcribe doesn’t buzz if only first or surname is being called, but our app guves a partial match"
+R02,1,called,yes,1.878,yes,
+K01,1,called,no,2.521,yes,
+K02,1,none,,,no,
+N01,1,none,,,no,
+N02,1,none,,,no,

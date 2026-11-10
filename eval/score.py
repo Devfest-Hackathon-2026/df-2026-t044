@@ -21,8 +21,13 @@ ANY_ALERT = FULL_ALERT | {"possible"}
 
 
 def load_csv(path: Path) -> list[dict[str, str]]:
-    with path.open(newline="", encoding="utf-8-sig") as f:
-        return [row for row in csv.DictReader(f) if any((v or "").strip() for v in row.values())]
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            with path.open(newline="", encoding=enc) as f:
+                return [row for row in csv.DictReader(f) if any((v or "").strip() for v in row.values())]
+        except UnicodeDecodeError:
+            continue
+    raise ValueError(f"Could not decode CSV file: {path}")
 
 
 def is_yes(value: str | None) -> bool:
