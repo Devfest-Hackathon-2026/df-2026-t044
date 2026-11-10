@@ -264,7 +264,7 @@ fun YobaretaAppScreen(
         }
     }
 
-    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, selectedGivenReading, ticketNumber, cloudRunUrl) {
+    LaunchedEffect(kanjiName, selectedFullReading, selectedSurnameReading, selectedGivenReading, proposedOptions, ticketNumber, cloudRunUrl) {
         ListenService.activeProfile = buildCurrentProfile()
     }
 

@@ -76,6 +76,7 @@ class ListenService : Service() {
 
         private const val SAMPLE_RATE_HZ = 16000
         private const val CHUNK_SAMPLES = 1600 // 100 ms per frame at 16 kHz
+        private const val RECALL_WINDOW_MS = 60_000L // 1 minute from first call
 
         private val _uiState = MutableStateFlow(ListenServiceUiState())
         val uiState: StateFlow<ListenServiceUiState> = _uiState.asStateFlow()
@@ -114,7 +115,10 @@ class ListenService : Service() {
 
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var previouslyCalledInSession = false
+    @Volatile
+    private var firstCalledElapsedMs: Long = 0L
+    @Volatile
+    private var firstCalledTargetKey: String = ""
     @Volatile
     private var isUploadInFlight = false
     @Volatile
@@ -164,7 +168,8 @@ class ListenService : Service() {
     private fun startAudioCaptureLoop() {
         if (captureJob?.isActive == true) return
 
-        previouslyCalledInSession = false
+        firstCalledElapsedMs = 0L
+        firstCalledTargetKey = ""
         sessionCapturedSamples = 0L
         sessionUploadedSamples = 0L
         audioGate.resetSessionCounters()
@@ -279,6 +284,10 @@ class ListenService : Service() {
         }
     }
 
+    private fun buildTargetKey(profile: UserWatchProfile): String {
+        return "${profile.kanjiName.trim().lowercase()}|${profile.selectedFullReading.trim().lowercase()}|${profile.ticketNumber.trim().lowercase()}"
+    }
+
     private fun forceUploadRecent3Seconds() {
         val samples = ringBuffer.readLastSeconds(3.5f)
         if (samples.isNotEmpty()) {
@@ -321,14 +330,27 @@ class ListenService : Service() {
                 )
             }
             try {
+                val currentTargetKey = buildTargetKey(profileSnapshot)
+                if (firstCalledTargetKey.isNotEmpty() && firstCalledTargetKey != currentTargetKey) {
+                    // User changed the watched name/reading/ticket -> reset recall state immediately
+                    firstCalledElapsedMs = 0L
+                    firstCalledTargetKey = ""
+                }
+                val nowElapsed = android.os.SystemClock.elapsedRealtime()
+                val isWithinOneMinuteOfFirstCall = firstCalledElapsedMs > 0L &&
+                    firstCalledTargetKey == currentTargetKey &&
+                    (nowElapsed - firstCalledElapsedMs) in 1L..RECALL_WINDOW_MS
+
                 val result = cloudClient.recognizeSegment(
                     pcm16LeBytes = pcmBytes,
                     profile = profileSnapshot,
-                    previouslyCalled = previouslyCalledInSession
+                    previouslyCalled = isWithinOneMinuteOfFirstCall
                 )
                 if (result.tier in listOf("possible", "called", "recall")) {
-                    if (result.tier == "called" || result.tier == "recall") {
-                        previouslyCalledInSession = true
+                    if (result.tier == "called") {
+                        // Start the 1-minute recall window strictly from the FIRST time being called
+                        firstCalledElapsedMs = android.os.SystemClock.elapsedRealtime()
+                        firstCalledTargetKey = currentTargetKey
                     }
                     val activeTier = _uiState.value.latestAlert?.tier
                     val isDowngradeFromFullCall =

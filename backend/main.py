@@ -47,7 +47,8 @@ app = FastAPI(
 
 # Ephemeral in-RAM recall tracker: maps anonymized UID hash -> last 'called' monotonic timestamp.
 # Never stores names, transcripts, or audio.
-_RECALL_WINDOW_SECONDS = 300.0
+# 1-minute (60s) recall window measured strictly from the FIRST 'called' event for a specific target.
+_RECALL_WINDOW_SECONDS = 60.0
 _RECENT_CALL_TIMESTAMPS: Dict[str, float] = {}
 
 # Sliding-window rate limiter to protect Cloud STT / Gemini credits against abuse
@@ -138,19 +139,26 @@ class RecognizeResponse(BaseModel):
     latency_ms: int
 
 
-def _check_and_update_recall_state(uid_hash: str, client_previously_called: bool) -> bool:
-    """Checks if this anonymized user was recently called within _RECALL_WINDOW_SECONDS."""
+def _check_and_update_recall_state(uid_hash: str, recall_key: str, client_previously_called: bool) -> bool:
+    """Checks if this anonymized user + target profile was called within the last 60 seconds (from first call)."""
     now = time.monotonic()
     expired = [k for k, ts in _RECENT_CALL_TIMESTAMPS.items() if now - ts > _RECALL_WINDOW_SECONDS]
     for k in expired:
         _RECENT_CALL_TIMESTAMPS.pop(k, None)
 
-    was_called_recently = client_previously_called or (uid_hash in _RECENT_CALL_TIMESTAMPS)
+    # If the same client switched to watching a different name/ticket, clear any older target entry for that uid_hash
+    uid_prefix = f"{uid_hash}:"
+    stale_targets = [k for k in _RECENT_CALL_TIMESTAMPS if k.startswith(uid_prefix) and k != recall_key]
+    for k in stale_targets:
+        _RECENT_CALL_TIMESTAMPS.pop(k, None)
+
+    was_called_recently = client_previously_called or (recall_key in _RECENT_CALL_TIMESTAMPS)
     return was_called_recently
 
 
-def _record_call_event(uid_hash: str) -> None:
-    _RECENT_CALL_TIMESTAMPS[uid_hash] = time.monotonic()
+def _record_call_event(recall_key: str) -> None:
+    """Records the timestamp of the FIRST call so recall only triggers within 60s of the initial call."""
+    _RECENT_CALL_TIMESTAMPS[recall_key] = time.monotonic()
 
 
 @app.get("/healthz")
@@ -263,18 +271,48 @@ async def recognize(
     # 1. Speech-to-Text V2 (chirp_3 in us multi-region, supporting ja-JP and en-US)
     t_stt0 = time.perf_counter()
     stt = get_stt_recognizer()
+    lang_mode_clean = (params.language_mode or "auto").strip().lower()
     try:
-        transcript = await asyncio.to_thread(
-            stt.recognize_pcm16,
-            audio_bytes,
-            params.full_name_readings,
-            params.surname_readings,
-            params.kanji_name,
-            params.ticket_number,
-            params.venue_mode,
-            params.language_mode,
-            params.given_name_readings,
-        )
+        if lang_mode_clean == "auto":
+            ja_task = asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                "ja-JP",
+                params.given_name_readings,
+            )
+            en_task = asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                "en-US",
+                params.given_name_readings,
+            )
+            transcript_ja, transcript_en = await asyncio.gather(ja_task, en_task)
+            candidate_transcripts = [t for t in (transcript_ja, transcript_en) if t]
+            if not candidate_transcripts:
+                candidate_transcripts = [""]
+        else:
+            single_t = await asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                params.language_mode,
+                params.given_name_readings,
+            )
+            candidate_transcripts = [single_t]
     except Exception as exc:
         logger.error(
             json.dumps(
@@ -292,28 +330,44 @@ async def recognize(
 
     # 2. Stage 1: Deterministic SudachiPy (Japanese) + Phonetic (English) matcher
     t_match0 = time.perf_counter()
-    # Use client's explicit previously_called state (and server recall state only when authenticated with a unique UID)
-    recall_key = f"{uid_hash}:{(params.kanji_name or '').strip()}:{(params.ticket_number or '').strip()}"
-    was_called_recently = params.previously_called or (
-        os.environ.get("REQUIRE_AUTH", "true").lower() in ("1", "true", "yes")
-        and _check_and_update_recall_state(recall_key, False)
+    readings_sig = ",".join(sorted(r.strip().lower() for r in params.full_name_readings if r.strip()))
+    recall_key = (
+        f"{uid_hash}:{(params.kanji_name or '').strip().lower()}:"
+        f"{readings_sig}:{(params.ticket_number or '').strip().lower()}"
     )
+    was_called_recently = params.previously_called or _check_and_update_recall_state(uid_hash, recall_key, False)
 
     full_thresh = float(os.environ.get("FULL_NAME_THRESHOLD", str(params.full_name_threshold)))
     surname_thresh = float(os.environ.get("SURNAME_THRESHOLD", str(params.surname_threshold)))
 
-    stage1 = evaluate_transcript(
-        transcript=transcript,
-        full_name_readings=params.full_name_readings,
-        surname_readings=params.surname_readings,
-        ticket_number=params.ticket_number,
-        kanji_name=params.kanji_name,
-        previously_called=was_called_recently,
-        full_name_threshold=full_thresh,
-        surname_threshold=surname_thresh,
-        given_name_readings=params.given_name_readings,
-        venue_mode=params.venue_mode,
-    )
+    tier_rank = {"none": 0, "possible": 1, "called": 2, "recall": 3}
+    best_stage1 = None
+    best_transcript = candidate_transcripts[0]
+    for cand_t in candidate_transcripts:
+        s1_cand = evaluate_transcript(
+            transcript=cand_t,
+            full_name_readings=params.full_name_readings,
+            surname_readings=params.surname_readings,
+            ticket_number=params.ticket_number,
+            kanji_name=params.kanji_name,
+            previously_called=was_called_recently,
+            full_name_threshold=full_thresh,
+            surname_threshold=surname_thresh,
+            given_name_readings=params.given_name_readings,
+            venue_mode=params.venue_mode,
+        )
+        if best_stage1 is None:
+            best_stage1 = s1_cand
+            best_transcript = cand_t
+        else:
+            cand_key = (tier_rank.get(s1_cand.tier, 0), 1 if s1_cand.destination else 0, s1_cand.score)
+            best_key = (tier_rank.get(best_stage1.tier, 0), 1 if best_stage1.destination else 0, best_stage1.score)
+            if cand_key > best_key:
+                best_stage1 = s1_cand
+                best_transcript = cand_t
+
+    stage1 = best_stage1
+    transcript = best_transcript
     matcher_ms = int((time.perf_counter() - t_match0) * 1000)
 
     # 3. Stage 2: Gemini Flash on Agent Platform (only on candidate matches, 2.5s timeout)
@@ -344,7 +398,8 @@ async def recognize(
             previously_called=was_called_recently,
         )
 
-    if final_result.tier in ("called", "recall"):
+    if final_result.tier == "called":
+        # Only start the 60s recall timer on the FIRST call ('called'), never extend it on 'recall'
         _record_call_event(recall_key)
 
     total_latency_ms = int((time.perf_counter() - t_start) * 1000)

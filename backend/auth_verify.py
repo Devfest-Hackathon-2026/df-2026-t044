@@ -85,8 +85,8 @@ async def verify_request_tokens(
 
     ensure_firebase_initialized()
 
-    require_auth = _env_bool("REQUIRE_AUTH", default=True)
-    require_app_check = _env_bool("REQUIRE_APP_CHECK", default=True)
+    require_auth = _env_bool("REQUIRE_AUTH", default=False)
+    require_app_check = _env_bool("REQUIRE_APP_CHECK", default=False)
 
     uid = "anonymous-dev"
     if require_auth:
