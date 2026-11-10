@@ -20,6 +20,8 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +36,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -756,18 +760,47 @@ fun ListeningHeroCard(
                 }
             }.ifEmpty { "Enter your name or ticket number below" }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = if (serviceState.isListening) "Listening for your call…" else "Ready to listen for",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (serviceState.isListening) Color(0xFFA7F3D0) else MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Text(
-                    text = targetSummary,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (serviceState.isListening) Color.White else MaterialTheme.colorScheme.onSecondaryContainer
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = if (serviceState.isListening) "Listening for your call…" else "Ready to listen for",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (serviceState.isListening) Color(0xFFA7F3D0) else MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text(
+                        text = targetSummary,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (serviceState.isListening) Color.White else MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFFF5E7DA),
+                    border = BorderStroke(
+                        2.dp,
+                        if (serviceState.isListening) Color(0xFF69F0AE) else MaterialTheme.colorScheme.outlineVariant
+                    ),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_mascot_knight),
+                        contentDescription = "Guardian Knight",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(3.dp)
+                            .clip(CircleShape)
+                    )
+                }
             }
 
             if (serviceState.isListening) {
@@ -999,6 +1032,23 @@ fun FullScreenCallAlert(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFFF5E7DA),
+                    border = BorderStroke(3.dp, Color.White),
+                    modifier = Modifier.size(78.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_mascot_herald),
+                        contentDescription = "Calling Herald",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                    )
+                }
+
                 if (alert.destination.isNotEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -1087,7 +1137,7 @@ fun FullScreenCallAlert(
                         containerColor = Color.Black.copy(alpha = 0.25f),
                         contentColor = Color.White
                     ),
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color.White),
+                    border = BorderStroke(2.dp, Color.White),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier
                         .fillMaxWidth()
