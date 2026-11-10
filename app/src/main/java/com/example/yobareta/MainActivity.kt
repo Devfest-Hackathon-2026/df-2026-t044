@@ -187,6 +187,8 @@ fun YobaretaAppScreen(
     onForceSendClip: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+    val pillsScrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     var kanjiName by remember { mutableStateOf("") }
     var selectedFullReading by remember { mutableStateOf("") }
@@ -415,37 +417,125 @@ fun YobaretaAppScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Compact Horizontal Reading Pills
+                val applyReadingOption: (ReadingOption) -> Unit = { option ->
+                    selectedFullReading = option.fullReading
+                    selectedSurnameReading = option.surnameReading
+                    val fClean = option.fullReading.replace("　", " ").trim()
+                    val sClean = option.surnameReading.replace("　", " ").trim()
+                    selectedGivenReading = fClean.replace(sClean, "").trim()
+                }
+
+                // Compact Horizontal Reading Pills with Navigation Arrows
                 if (proposedOptions.isNotEmpty()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        proposedOptions.forEach { option ->
-                            val isSelected = selectedFullReading == option.fullReading
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    selectedFullReading = option.fullReading
-                                    selectedSurnameReading = option.surnameReading
-                                    val fClean = option.fullReading.replace("　", " ").trim()
-                                    val sClean = option.surnameReading.replace("　", " ").trim()
-                                    selectedGivenReading = fClean.replace(sClean, "").trim()
-                                },
-                                label = {
-                                    Text(
-                                        text = if (option.note.isNotEmpty()) {
-                                            "${option.fullReading} (${option.note})"
-                                        } else {
-                                            option.fullReading
-                                        },
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    )
+                        // Left navigation: scroll to English and select English / phonetic option
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    val engOption = proposedOptions.firstOrNull {
+                                        it.note.contains("Phonetic", ignoreCase = true) ||
+                                            it.fullReading.any { ch -> ch in 'A'..'Z' || ch in 'a'..'z' }
+                                    } ?: proposedOptions.first()
+                                    applyReadingOption(engOption)
+                                    coroutineScope.launch {
+                                        pillsScrollState.animateScrollTo(0)
+                                    }
                                 }
-                            )
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "ENG",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "←",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(pillsScrollState),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            proposedOptions.forEach { option ->
+                                val isSelected = selectedFullReading == option.fullReading
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { applyReadingOption(option) },
+                                    label = {
+                                        Text(
+                                            text = if (option.note.isNotEmpty()) {
+                                                "${option.fullReading} (${option.note})"
+                                            } else {
+                                                option.fullReading
+                                            },
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        // Right navigation: scroll to Japanese and select Japanese PA / Katakana option
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    val jpOption = proposedOptions.firstOrNull {
+                                        it.note.contains("Japanese", ignoreCase = true) ||
+                                            it.note.contains("標準", ignoreCase = true) ||
+                                            it.fullReading.any { ch -> ch in '\u30A0'..'\u30FF' || ch in '\u3040'..'\u309F' }
+                                    } ?: proposedOptions.last()
+                                    applyReadingOption(jpOption)
+                                    coroutineScope.launch {
+                                        pillsScrollState.animateScrollTo(pillsScrollState.maxValue)
+                                    }
+                                }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "日本語",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "→",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
