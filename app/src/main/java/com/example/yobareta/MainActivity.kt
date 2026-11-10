@@ -888,6 +888,21 @@ fun PossibleSurnameBanner(
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
+            if (alert.destination.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Destination: ${alert.destination}",
+                        color = Color.Black,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
             if (alert.transcriptMasked.isNotEmpty()) {
                 Text(
                     text = "「${alert.transcriptMasked}」",
@@ -895,6 +910,11 @@ fun PossibleSurnameBanner(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            Text(
+                text = "Matched: ${alert.matchedTrigger} • Latency: ${alert.latencyMs} ms",
+                color = Color.White.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelSmall
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)

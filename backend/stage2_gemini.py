@@ -329,12 +329,11 @@ def merge_stage1_and_stage2(
     # Invariant: Partial name matches (surname-only or first-name-only) NEVER fire a full alert!
     if stage1.match_type in ("surname", "given_name"):
         label = "first name" if stage1.match_type == "given_name" else "surname"
-        if "Possible" not in instruction_plain:
-            instruction_plain = (
-                f"Possible call ({label} match) → {destination}"
-                if destination
-                else f"Possible call ({label} matched)"
-            )
+        instruction_plain = (
+            f"Possible call ({label} match) → {destination}"
+            if destination
+            else f"Possible call ({label} matched)"
+        )
         return MatchResult(
             tier="possible",
             score=round(max(stage1.score, stage2.confidence * 0.9), 4),
