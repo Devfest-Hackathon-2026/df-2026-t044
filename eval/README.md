@@ -62,3 +62,25 @@ python3 eval/score.py eval/results.csv
 ```
 
 The summary reports true-call detection rate, surname-only call handling, false-alarm rate on same-surname distractors and room numbers, non-call suppression, destination extraction accuracy, and median end-to-end latency.
+
+---
+
+## 5. Recorded Head-to-Head Benchmark Results (`eval/results.csv`)
+
+Physical device evaluation across all 26 utterances (`python eval/score.py eval/results.csv`):
+
+| Metric | Yobareta | Live Transcribe |
+| :--- | :--- | :--- |
+| **True calls detected (full alert / buzz)** | **13/13 (100%)** | 9/13 (69%) |
+| **Surname-only calls noticed (any alert)** | **4/4 (100%)** | 0/4 (0%) |
+| **Distractors: FALSE full alarms** *(lower = better)* | **1/7 (14%)** | 2/7 (29%) |
+| **Distractors: soft Possible alerts** | **2/7 (29%)** | *(no tiers)* |
+| **Non-calls: any alert** *(lower = better)* | **0/2 (0%)** | 0/2 (0%) |
+| **Correct destination shown** | **11/13 (85%)** | *(not offered)* |
+| **Median latency (end of name → buzz)** | **2.25 s (n=20)** | n/a |
+
+### Key Observations from Physical Device Testing (`eval/results.csv`)
+- **Cross-Language Announcements (`A10`, `B04`):** When a Japanese name is called in English (`A10`) or an English name is called in Japanese Katakana (`B04`), Live Transcribe fails to buzz, whereas Yobareta's bilingual readings + dual-language STT (`chirp_3`) detect both (`1.97 s` and `1.97 s`).
+- **Partial / Surname-Only Calls (`A04`, `B02`, `C02`, `R01`):** Live Transcribe does not buzz when only a surname or given name is called unless the user registers bare surnames (which then causes false full alarms on same-surname strangers). Yobareta surfaces these as a non-intrusive **Tier 1 (`Possible`)** amber banner.
+- **Alphanumeric Ticket Calls (`B06`):** Live Transcribe transcribes `"Order A-12"` as `"a 12"` and misses the trigger, whereas Yobareta normalizes ticket numbers (`A-12` / `Aの12番`) and extracts the destination (`Pickup Counter`).
+
