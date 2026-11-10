@@ -271,18 +271,48 @@ async def recognize(
     # 1. Speech-to-Text V2 (chirp_3 in us multi-region, supporting ja-JP and en-US)
     t_stt0 = time.perf_counter()
     stt = get_stt_recognizer()
+    lang_mode_clean = (params.language_mode or "auto").strip().lower()
     try:
-        transcript = await asyncio.to_thread(
-            stt.recognize_pcm16,
-            audio_bytes,
-            params.full_name_readings,
-            params.surname_readings,
-            params.kanji_name,
-            params.ticket_number,
-            params.venue_mode,
-            params.language_mode,
-            params.given_name_readings,
-        )
+        if lang_mode_clean == "auto":
+            ja_task = asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                "ja-JP",
+                params.given_name_readings,
+            )
+            en_task = asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                "en-US",
+                params.given_name_readings,
+            )
+            transcript_ja, transcript_en = await asyncio.gather(ja_task, en_task)
+            candidate_transcripts = [t for t in (transcript_ja, transcript_en) if t]
+            if not candidate_transcripts:
+                candidate_transcripts = [""]
+        else:
+            single_t = await asyncio.to_thread(
+                stt.recognize_pcm16,
+                audio_bytes,
+                params.full_name_readings,
+                params.surname_readings,
+                params.kanji_name,
+                params.ticket_number,
+                params.venue_mode,
+                params.language_mode,
+                params.given_name_readings,
+            )
+            candidate_transcripts = [single_t]
     except Exception as exc:
         logger.error(
             json.dumps(
@@ -300,32 +330,44 @@ async def recognize(
 
     # 2. Stage 1: Deterministic SudachiPy (Japanese) + Phonetic (English) matcher
     t_match0 = time.perf_counter()
-    # Use client's explicit previously_called state (and server recall state only when authenticated with a unique UID)
     readings_sig = ",".join(sorted(r.strip().lower() for r in params.full_name_readings if r.strip()))
     recall_key = (
         f"{uid_hash}:{(params.kanji_name or '').strip().lower()}:"
         f"{readings_sig}:{(params.ticket_number or '').strip().lower()}"
     )
-    was_called_recently = params.previously_called or (
-        os.environ.get("REQUIRE_AUTH", "true").lower() in ("1", "true", "yes")
-        and _check_and_update_recall_state(uid_hash, recall_key, False)
-    )
+    was_called_recently = params.previously_called or _check_and_update_recall_state(uid_hash, recall_key, False)
 
     full_thresh = float(os.environ.get("FULL_NAME_THRESHOLD", str(params.full_name_threshold)))
     surname_thresh = float(os.environ.get("SURNAME_THRESHOLD", str(params.surname_threshold)))
 
-    stage1 = evaluate_transcript(
-        transcript=transcript,
-        full_name_readings=params.full_name_readings,
-        surname_readings=params.surname_readings,
-        ticket_number=params.ticket_number,
-        kanji_name=params.kanji_name,
-        previously_called=was_called_recently,
-        full_name_threshold=full_thresh,
-        surname_threshold=surname_thresh,
-        given_name_readings=params.given_name_readings,
-        venue_mode=params.venue_mode,
-    )
+    tier_rank = {"none": 0, "possible": 1, "called": 2, "recall": 3}
+    best_stage1 = None
+    best_transcript = candidate_transcripts[0]
+    for cand_t in candidate_transcripts:
+        s1_cand = evaluate_transcript(
+            transcript=cand_t,
+            full_name_readings=params.full_name_readings,
+            surname_readings=params.surname_readings,
+            ticket_number=params.ticket_number,
+            kanji_name=params.kanji_name,
+            previously_called=was_called_recently,
+            full_name_threshold=full_thresh,
+            surname_threshold=surname_thresh,
+            given_name_readings=params.given_name_readings,
+            venue_mode=params.venue_mode,
+        )
+        if best_stage1 is None:
+            best_stage1 = s1_cand
+            best_transcript = cand_t
+        else:
+            cand_key = (tier_rank.get(s1_cand.tier, 0), 1 if s1_cand.destination else 0, s1_cand.score)
+            best_key = (tier_rank.get(best_stage1.tier, 0), 1 if best_stage1.destination else 0, best_stage1.score)
+            if cand_key > best_key:
+                best_stage1 = s1_cand
+                best_transcript = cand_t
+
+    stage1 = best_stage1
+    transcript = best_transcript
     matcher_ms = int((time.perf_counter() - t_match0) * 1000)
 
     # 3. Stage 2: Gemini Flash on Agent Platform (only on candidate matches, 2.5s timeout)

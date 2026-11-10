@@ -485,6 +485,16 @@ object KanjiReadingProposer {
         "watanabe" to "wah-tah-NAH-beh"
     )
 
+    private val ROMANIZED_JAPANESE_SURNAMES: Set<String> = setOf(
+        "gojou", "gojo", "uzumaki", "shoji", "shouji", "tokairin", "toukairin",
+        "sato", "satou", "suzuki", "takahashi", "tanaka", "watanabe", "ito", "itou",
+        "yamamoto", "nakamura", "kobayashi", "kato", "katou", "yoshida", "yamada",
+        "sasaki", "yamaguchi", "matsumoto", "inoue", "kimura", "hayashi", "saito", "saitou",
+        "shimizu", "yamazaki", "yamasaki", "mori", "ikeda", "hashimoto", "abe", "ishikawa",
+        "nakajima", "nakashima", "maeda", "fujita", "ogawa", "goto", "gotou", "okada",
+        "hasegawa", "murakami", "kondo", "kondou", "ishii", "sakamoto", "endo", "endou"
+    )
+
     // Curated & rule-based English/Romaji -> Katakana for Japanese PA announcements
     private val ENGLISH_TO_KATAKANA: Map<String, String> = mapOf(
         "alex" to "アレックス",
@@ -584,12 +594,24 @@ object KanjiReadingProposer {
 
         if (nameIsLatin) {
             fullHints.add(name)
-            name.split(Regex("\\s+")).lastOrNull()?.let { surnameHints.add(it) }
+            val words = name.split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (words.size == 2) {
+                fullHints.add("${words[1]} ${words[0]}")
+            }
+            if (words.isNotEmpty()) {
+                val firstLower = words.first().lowercase().replace(Regex("[^a-z]"), "")
+                val surnameFirst = words.size >= 2 && firstLower in ROMANIZED_JAPANESE_SURNAMES
+                surnameHints.add(if (surnameFirst) words.first() else words.last())
+            }
         }
 
         for (option in options) {
             if (isPhoneticRespelling(option.fullReading, option.note)) continue
             fullHints.add(option.fullReading)
+            val optWords = option.fullReading.replace("　", " ").trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (optWords.size == 2) {
+                fullHints.add("${optWords[1]} ${optWords[0]}")
+            }
             surnameHints.add(option.surnameReading)
 
             if (!nameIsLatin) {
@@ -616,7 +638,9 @@ object KanjiReadingProposer {
 
         val words = name.split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (words.size >= 2) {
-            givenHints.add(if (nameIsLatin) words.first() else words.last())
+            val firstLower = words.first().lowercase().replace(Regex("[^a-z]"), "")
+            val surnameFirst = nameIsLatin && firstLower in ROMANIZED_JAPANESE_SURNAMES
+            givenHints.add(if (nameIsLatin && !surnameFirst) words.first() else words.last())
         }
 
         for (option in options) {
@@ -1040,7 +1064,13 @@ object KanjiReadingProposer {
             val words = normalized.split(Regex("\\s+")).filter { it.isNotEmpty() }
             if (words.isEmpty()) return emptyList()
             val phoneticWords = words.map { wordToPhoneticSpeak(it) }
-            val surnameWord = if (words.size >= 2) words.last() else words.first()
+            val firstLower = words.first().lowercase().replace(Regex("[^a-z]"), "")
+            val surnameFirst = words.size >= 2 && firstLower in ROMANIZED_JAPANESE_SURNAMES
+            val surnameWord = if (words.size >= 2) {
+                if (surnameFirst) words.first() else words.last()
+            } else {
+                words.first()
+            }
             val surnamePhonetic = wordToPhoneticSpeak(surnameWord)
 
             val options = mutableListOf(
@@ -1054,9 +1084,17 @@ object KanjiReadingProposer {
             val kataWords = words.map { wordToKatakana(it) }.filter { it.isNotEmpty() }
             if (kataWords.isNotEmpty()) {
                 val kataSurname = wordToKatakana(surnameWord).ifEmpty { kataWords.last() }
+                // If user typed 'Naruto Uzumaki' (Given Surname) where Uzumaki is a Japanese surname,
+                // put Japanese PA reading in Japanese order ('ウズマキ ナルト') so it matches Japanese announcements
+                val lastLower = words.last().lowercase().replace(Regex("[^a-z]"), "")
+                val kataFull = if (kataWords.size == 2 && !surnameFirst && lastLower in ROMANIZED_JAPANESE_SURNAMES) {
+                    "${kataWords[1]} ${kataWords[0]}"
+                } else {
+                    kataWords.joinToString(" ")
+                }
                 options.add(
                     ReadingOption(
-                        fullReading = kataWords.joinToString(" "),
+                        fullReading = kataFull,
                         surnameReading = kataSurname,
                         note = "Japanese PA"
                     )

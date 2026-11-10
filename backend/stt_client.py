@@ -108,6 +108,11 @@ def resolve_language_codes(
     if mode in ("ja", "ja-jp", "japanese"):
         return ["ja-JP"]
     # 'auto' / bilingual mode: put primary script language first, secondary second
+    has_ja_name = bool(kanji_name and re.search(r"[\u3040-\u30FF\u4E00-\u9FFF]", kanji_name))
+    primary_reading = full_name_readings[0] if full_name_readings else ""
+    primary_is_ja = bool(re.search(r"[\u3040-\u30FF\u4E00-\u9FFF]", primary_reading))
+    if has_ja_name or primary_is_ja:
+        return ["ja-JP", "en-US"]
     has_latin = bool(kanji_name and re.search(r"[A-Za-z]", kanji_name)) or any(
         re.search(r"[A-Za-z]", r) for r in full_name_readings
     )
