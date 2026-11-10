@@ -48,21 +48,21 @@ def median_str(values: list[float]) -> str:
 
 PROFILES = {
     "A": {
-        "kanji_name": "東海林 太郎",
-        "full_name_readings": ["ショウジ タロウ", "トウカイリン タロウ", "Shouji Tarou", "Tarou Shouji"],
-        "surname_readings": ["ショウジ", "トウカイリン", "Shouji"],
+        "kanji_name": "五条 悟",
+        "full_name_readings": ["ゴジョウ サトル", "Gojou Satoru", "Satoru Gojou", "Gojo Satoru", "Satoru Gojo"],
+        "surname_readings": ["ゴジョウ", "Gojou", "Gojo"],
         "ticket_number": "305",
     },
     "B": {
-        "kanji_name": "Alex Smith",
-        "full_name_readings": ["Alex Smith", "アレックス スミス"],
-        "surname_readings": ["Smith", "スミス"],
+        "kanji_name": "Harry Potter",
+        "full_name_readings": ["Harry Potter", "ハリー ポッター"],
+        "surname_readings": ["Potter", "ポッター"],
         "ticket_number": "A-12",
     },
     "C": {
-        "kanji_name": "佐藤 太郎",
-        "full_name_readings": ["サトウ タロウ", "Satou Tarou", "Tarou Satou"],
-        "surname_readings": ["サトウ", "Satou"],
+        "kanji_name": "うずまき ナルト",
+        "full_name_readings": ["ウズマキ ナルト", "Uzumaki Naruto", "Naruto Uzumaki"],
+        "surname_readings": ["ウズマキ", "Uzumaki"],
         "ticket_number": "",
     },
 }

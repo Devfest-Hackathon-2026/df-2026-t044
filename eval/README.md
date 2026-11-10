@@ -19,9 +19,9 @@ Set up **both apps with the same information** for each profile, so the comparis
 
 | Profile | Name typed in Yobareta | Ticket # | Names to add in Live Transcribe |
 | :--- | :--- | :--- | :--- |
-| **A** | `東海林 太郎` | `305` | `東海林太郎`, `東海林`, `ショウジ` |
-| **B** | `Alex Smith` | `A-12` | `Alex Smith`, `Smith` |
-| **C** | `佐藤 太郎` | *(none)* | `佐藤太郎`, `佐藤` |
+| **A** | `五条 悟` (`Gojou Satoru`) | `305` | `五条悟`, `五条`, `ゴジョウ` |
+| **B** | `Harry Potter` | `A-12` | `Harry Potter`, `Potter` |
+| **C** | `うずまき ナルト` (`Naruto Uzumaki`) | *(none)* | `うずまきナルト`, `うずまき`, `ウズマキ` |
 
 - **Live Transcribe:** turn on the setting that vibrates when your name is spoken, and add the names above. Including the surname is what a real user would do to catch surname-only calls. It is also why Live Transcribe may buzz when *someone else* with the same surname is called. That trade-off is the point of tests A08 and C01.
 - **Yobareta:** check that the reading pills show the expected readings (e.g. ショウジ / トウカイリン for profile A) before you start.

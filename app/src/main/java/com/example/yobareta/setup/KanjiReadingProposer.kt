@@ -29,6 +29,9 @@ object KanjiReadingProposer {
     // Curated instant lookup for multi-reading & common Japanese surnames (200+ entries)
     private val MULTI_READING_SURNAMES: Map<String, List<Pair<String, String>>> = mapOf(
         "東海林" to listOf("ショウジ" to "一般的", "トウカイリン" to "別読み"),
+        "五条" to listOf("ゴジョウ" to "標準"),
+        "うずまき" to listOf("ウズマキ" to "標準"),
+        "渦巻" to listOf("ウズマキ" to "標準"),
         "小鳥遊" to listOf("タカナシ" to "難読姓"),
         "四月一日" to listOf("ワタヌキ" to "難読姓", "ツボミ" to "別読み"),
         "月見里" to listOf("ヤマナシ" to "難読姓"),
@@ -227,6 +230,9 @@ object KanjiReadingProposer {
 
     private val COMMON_GIVEN_NAMES: Map<String, List<String>> = mapOf(
         "太郎" to listOf("タロウ"),
+        "悟" to listOf("サトル"),
+        "ナルト" to listOf("ナルト"),
+        "鳴門" to listOf("ナルト"),
         "一郎" to listOf("イチロウ"),
         "次郎" to listOf("ジロウ"),
         "二郎" to listOf("ジロウ"),
@@ -354,7 +360,7 @@ object KanjiReadingProposer {
 
     // Per-character Kanji reading fallback so arbitrary Kanji names convert to Katakana immediately
     private val KANJI_CHAR_READINGS: Map<Char, String> = mapOf(
-        '田' to "タ", '中' to "ナカ", '山' to "ヤマ", '川' to "カワ", '本' to "モト",
+        '田' to "タ", '条' to "ジョウ", '悟' to "サトル", '渦' to "ウズ", '巻' to "マキ", '鳴' to "ナル", '中' to "ナカ", '山' to "ヤマ", '川' to "カワ", '本' to "モト",
         '村' to "ムラ", '木' to "キ", '林' to "ハヤシ", '森' to "モリ", '沢' to "サワ",
         '澤' to "サワ", '河' to "カワ", '池' to "イケ", '海' to "ウミ", '浦' to "ウラ",
         '浜' to "ハマ", '濱' to "ハマ", '島' to "シマ", '嶋' to "シマ", '崎' to "サキ",
@@ -418,6 +424,13 @@ object KanjiReadingProposer {
     // Curated phonetic respellings for common English / international names
     private val ENGLISH_TO_PHONETIC: Map<String, String> = mapOf(
         "alex" to "AH-leks",
+        "harry" to "HAIR-ee",
+        "potter" to "PAH-tur",
+        "gojou" to "GOH-joh",
+        "gojo" to "GOH-joh",
+        "satoru" to "sah-TOH-roo",
+        "naruto" to "NAH-roo-toh",
+        "uzumaki" to "oo-zoo-MAH-kee",
         "alexander" to "ah-leg-ZAN-der",
         "smith" to "SMITH",
         "john" to "JON",
@@ -475,6 +488,13 @@ object KanjiReadingProposer {
     // Curated & rule-based English/Romaji -> Katakana for Japanese PA announcements
     private val ENGLISH_TO_KATAKANA: Map<String, String> = mapOf(
         "alex" to "アレックス",
+        "harry" to "ハリー",
+        "potter" to "ポッター",
+        "gojou" to "ゴジョウ",
+        "gojo" to "ゴジョウ",
+        "satoru" to "サトル",
+        "naruto" to "ナルト",
+        "uzumaki" to "ウズマキ",
         "alexander" to "アレクサンダー",
         "smith" to "スミス",
         "john" to "ジョン",

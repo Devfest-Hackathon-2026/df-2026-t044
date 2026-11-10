@@ -8,6 +8,8 @@ Usage:
 """
 
 import csv
+import sys
+if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8')
 import io
 import os
 from pathlib import Path

@@ -1,26 +1,26 @@
 id,profile,category,setting,language,announcement,acceptable_tiers,expected_destination,gap_tested
-A01,A,true_call,hospital,ja,ショウジタロウ様、3番診察室へお入りください。,called|recall,Exam Room 3,Japanese name reading (東海林 → ショウジ)
-A02,A,true_call,hospital,ja,トウカイリンタロウ様、2番診察室へお入りください。,called|recall,Exam Room 2,Alternate kanji reading (東海林 → トウカイリン)
-A03,A,true_call,hospital,ja,ショージタロー様、1番診察室へどうぞ。,called|recall,Exam Room 1,Long-vowel variation (ショウジ = ショージ)
-A04,A,surname_only_call,hospital,ja,ショウジ様、受付までお越しください。,possible,Reception,Surname-only call stays a soft alert
-A05,A,true_call,hospital,ja,再度お呼びいたします。ショウジタロウ様、3番診察室へお入りください。,recall,Exam Room 3,Re-call detection
+A01,A,true_call,hospital,ja,ゴジョウサトル様、3番診察室へお入りください。,called|recall,Exam Room 3,Japanese full name reading (五条悟 → ゴジョウサトル)
+A02,A,true_call,hospital,ja,五条悟様、2番診察室へお入りください。,called|recall,Exam Room 2,Kanji full name reading (五条悟)
+A03,A,true_call,hospital,ja,ゴジョーサトル様、1番診察室へどうぞ。,called|recall,Exam Room 1,Long-vowel variation (ゴジョウ = ゴジョー)
+A04,A,surname_only_call,hospital,ja,ゴジョウ様、受付までお越しください。,possible,Reception,Surname-only call stays a soft alert
+A05,A,true_call,hospital,ja,再度お呼びいたします。ゴジョウサトル様、3番診察室へお入りください。,recall,Exam Room 3,Re-call detection
 A06,A,true_call,hospital,ja,受付番号305番の方、5番窓口までお越しください。,called|recall,Counter 5,Ticket number + destination
 A07,A,distractor,hospital,ja,305号室のスズキ様、処置室へお越しください。,none,,Room number must not fire ticket #305
-A08,A,distractor,hospital,ja,ショウジハナコ様、1番診察室へお入りください。,none|possible,,Same surname / different person
+A08,A,distractor,hospital,ja,ゴジョウハナコ様、1番診察室へお入りください。,none|possible,,Same surname / different person
 A09,A,distractor,hospital,ja,スズキイチロウ様、3番診察室へお入りください。,none,,Different person + same room number
-A10,A,true_call,hospital,en,"Taro Shoji, please proceed to Exam Room 3.",called|recall,Exam Room 3,Japanese name announced in English (western order)
-B01,B,true_call,hospital,en,"Alex Smith, please proceed to Exam Room 3.",called|recall,Exam Room 3,English full name
-B02,B,surname_only_call,hospital,en,"Mr. Smith, please come to Counter 2.",possible,Counter 2,English surname-only stays a soft alert
-B03,B,true_call,hospital,en,"Final call for Alex Smith, please proceed to Exam Room 3.",recall,Exam Room 3,English re-call
-B04,B,true_call,hospital,ja,アレックス・スミス様、2番診察室へお入りください。,called|recall,Exam Room 2,English name announced in Japanese katakana
-B05,B,distractor,hospital,en,"Alex Johnson, please proceed to Room 4.",none,,Same first name / different person
+A10,A,true_call,hospital,en,"Satoru Gojou, please proceed to Exam Room 3.",called|recall,Exam Room 3,Japanese name announced in English (western order)
+B01,B,true_call,hospital,en,"Harry Potter, please proceed to Exam Room 3.",called|recall,Exam Room 3,English full name
+B02,B,surname_only_call,hospital,en,"Mr. Potter, please come to Counter 2.",possible,Counter 2,English surname-only stays a soft alert
+B03,B,true_call,hospital,en,"Final call for Harry Potter, please proceed to Exam Room 3.",recall,Exam Room 3,English re-call
+B04,B,true_call,hospital,ja,ハリー・ポッター様、2番診察室へお入りください。,called|recall,Exam Room 2,English name announced in Japanese katakana
+B05,B,distractor,hospital,en,"Harry Johnson, please proceed to Room 4.",none,,Same first name / different person
 B06,B,true_call,cafe,en,"Order A-12 is ready at the pickup counter.",called|recall,Pickup Counter,Alphanumeric order number
 B07,B,distractor,cafe,en,"Order A-21 is ready at the pickup counter.",none,,Near-miss order number
-C01,C,distractor,hospital,ja,サトウハナコ様、2番診察室へお入りください。,none|possible,,Common surname false alarm (佐藤)
-C02,C,surname_only_call,hospital,ja,サトウ様、会計窓口までお越しください。,possible,Cashier,Common surname-only call
-C03,C,true_call,hospital,ja,サトウタロウ様、4番診察室へお入りください。,called|recall,Exam Room 4,Common surname + full name
-R01,A,surname_only_call,restaurant,ja,2名様でお待ちのショウジ様、お席のご用意ができました。,possible,Seating,Restaurant surname + party size (see README open question)
-R02,A,true_call,restaurant,ja,ショウジタロウ様、お席へご案内いたします。,called|recall,Seating,Restaurant full name
+C01,C,distractor,hospital,ja,ウズマキヒナタ様、2番診察室へお入りください。,none|possible,,Same surname false alarm (うずまき)
+C02,C,surname_only_call,hospital,ja,ウズマキ様、会計窓口までお越しください。,possible,Cashier,Surname-only call (うずまき)
+C03,C,true_call,hospital,ja,ウズマキナルト様、4番診察室へお入りください。,called|recall,Exam Room 4,Full name (うずまきナルト)
+R01,A,surname_only_call,restaurant,ja,2名様でお待ちのゴジョウ様、お席のご用意ができました。,possible,Seating,Restaurant surname + party size
+R02,A,true_call,restaurant,ja,ゴジョウサトル様、お席へご案内いたします。,called|recall,Seating,Restaurant full name
 K01,A,true_call,cafe,ja,ご注文番号305番でお待ちのお客様、お渡し口までお越しください。,called|recall,Pickup Counter,Cafe order number
 K02,A,distractor,cafe,ja,ご注文番号350番でお待ちのお客様、お渡し口までお越しください。,none,,Near-miss order number (350 vs 305)
 N01,A,non_call,hospital,ja,本日は大変混み合っております。しばらくお待ちください。,none,,General PA announcement (no name)
