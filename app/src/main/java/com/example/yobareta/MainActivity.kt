@@ -11,6 +11,7 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColor
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private val authStatusText = mutableStateOf("Signing in anonymously...")
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         setShowWhenLocked(true)
@@ -101,7 +103,9 @@ class MainActivity : ComponentActivity() {
                 val authStatus by authStatusText
 
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .safeDrawingPadding(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     YobaretaAppScreen(
@@ -274,6 +278,7 @@ fun YobaretaAppScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .imePadding()
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
