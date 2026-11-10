@@ -77,9 +77,11 @@ Physical device evaluation across all 26 utterances (`python eval/score.py eval/
 | **Distractors: soft Possible alerts** | **2/7 (29%)** | *(no tiers)* |
 | **Non-calls: any alert** *(lower = better)* | **0/2 (0%)** | 0/2 (0%) |
 | **Correct destination shown** | **11/13 (85%)** | *(not offered)* |
-| **Median latency (end of name → buzz)** | **2.25 s (n=20)** | n/a |
+| **Median latency (end of name → buzz)** | **2.25 s (n=20)** | **< 1.0 s** *(almost immediate)* |
 
 ### Key Observations from Physical Device Testing (`eval/results.csv`)
+- **Latency Trade-Off (`< 1.0 s` vs. `2.25 s`):** Live Transcribe buzzes within **1 second (almost immediately)** because it streams continuously and triggers on a raw substring match the instant the name is spoken. Yobareta has a slightly longer median latency (**`2.25 s`**) because it captures the complete announcement phrase (`3番診察室へお入りください` / `please proceed to Exam Room 3`) so it can extract the **destination room/counter** and verify context before alerting.
+- **Spaces in Japanese Names (`C03`):** If the user inputs a Japanese name with a space between the surname and first name (e.g., `五条 悟` or `うずまき ナルト`), **Live Transcribe does not buzz at all** because Japanese STT outputs continuous text without spaces (`うずまきナルト`). Yobareta strips and normalizes whitespace and Katakana morae automatically, so spaced and unspaced Japanese names both match reliably.
 - **Cross-Language Announcements (`A10`, `B04`):** When a Japanese name is called in English (`A10`) or an English name is called in Japanese Katakana (`B04`), Live Transcribe fails to buzz, whereas Yobareta's bilingual readings + dual-language STT (`chirp_3`) detect both (`1.97 s` and `1.97 s`).
 - **Partial / Surname-Only Calls (`A04`, `B02`, `C02`, `R01`):** Live Transcribe does not buzz when only a surname or given name is called unless the user registers bare surnames (which then causes false full alarms on same-surname strangers). Yobareta surfaces these as a non-intrusive **Tier 1 (`Possible`)** amber banner.
 - **Alphanumeric Ticket Calls (`B06`):** Live Transcribe transcribes `"Order A-12"` as `"a 12"` and misses the trigger, whereas Yobareta normalizes ticket numbers (`A-12` / `Aの12番`) and extracts the destination (`Pickup Counter`).
